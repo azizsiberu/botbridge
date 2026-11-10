@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: botbridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botbridge}
+      POSTGRES_DB: botbridge
+    volumes:
+      - botbridge-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botbridge -d botbridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  botbridge:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://botbridge:${POSTGRES_PASSWORD:-botbridge}@postgres:5432/botbridge
+      HOST: 0.0.0.0
+      PORT: 8787
+      NODE_ENV: production
+    ports:
+      - "8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  botbridge-pg:

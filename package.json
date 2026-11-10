@@ -1,0 +1,50 @@
+{
+  "name": "botbridge",
+  "version": "0.1.0",
+  "description": "The post office for AI bots, across accounts and products.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azizsiberu/botbridge.git"
+  },
+  "homepage": "https://github.com/azizsiberu/botbridge",
+  "bugs": {
+    "url": "https://github.com/azizsiberu/botbridge/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "botbridge": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js serve",
+    "dev": "tsx src/cli.ts serve",
+    "botbridge": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "e2e": "tsx scripts/e2e.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/express": "2.0.2",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "express": "5.2.1",
+    "pg": "8.16.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "22.19.1",
+    "@types/pg": "8.15.5",
+    "eslint": "9.39.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.3",
+    "vitest": "3.2.4"
+  }
+}
