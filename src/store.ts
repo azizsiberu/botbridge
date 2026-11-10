@@ -40,6 +40,9 @@ interface BotRecord extends PublicBot {
   revoked_at: Date | null;
   token_prefix: string;
   created_at: Date;
+  clerk_user_id: string | null;
+  clerk_email: string | null;
+  updated_at: Date;
 }
 
 interface Queryable {
@@ -52,6 +55,14 @@ function publicBot(row: { id: string; name: string; description: string; capabil
     name: row.name,
     description: row.description,
     capabilities: row.capabilities,
+  };
+}
+
+function toActor(row: BotRecord): Actor {
+  return {
+    ...publicBot(row),
+    webhookConfigured: row.webhook_url !== null,
+    webhookProfile: row.webhook_profile,
   };
 }
 
@@ -100,7 +111,7 @@ async function enqueueDoorbell(
   );
 }
 
-const BOT_COLUMNS = `id, name, description, capabilities, webhook_url, webhook_secret_enc, webhook_profile, revoked_at, token_prefix, created_at`;
+const BOT_COLUMNS = `id, name, description, capabilities, webhook_url, webhook_secret_enc, webhook_profile, revoked_at, token_prefix, created_at, clerk_user_id, clerk_email, updated_at`;
 
 async function findActive(db: Queryable, to: string): Promise<BotRecord | null> {
   if (isUuid(to)) {
@@ -125,11 +136,7 @@ export async function authenticateBot(pool: Pool, token: string): Promise<Actor 
   );
   const row = result.rows[0];
   if (!row || row.revoked_at) return null;
-  return {
-    ...publicBot(row),
-    webhookConfigured: row.webhook_url !== null,
-    webhookProfile: row.webhook_profile,
-  };
+  return toActor(row);
 }
 
 export async function addBot(
@@ -267,6 +274,233 @@ export async function clearWebhook(pool: Pool, name: string): Promise<void> {
      WHERE id = $1`,
     [bot.id],
   );
+}
+
+export async function getBotById(pool: Pool, id: string): Promise<BotRecord | null> {
+  const result = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE id = $1`, [requireUuid(id, 'bot id')]);
+  return result.rows[0] ?? null;
+}
+
+export async function rotateBotToken(pool: Pool, id: string): Promise<{ bot: PublicBot; token: string }> {
+  const bot = await getBotById(pool, id);
+  if (!bot) throw new UserError('Bot not found.');
+  if (bot.revoked_at) throw new UserError('Reactivate the bot before rotating its token.');
+  const token = generateToken();
+  await pool.query(`UPDATE bots SET token_hash = $2, token_prefix = $3, updated_at = now() WHERE id = $1`, [
+    bot.id,
+    hashToken(token),
+    tokenPrefix(token),
+  ]);
+  await writeAudit(pool, {
+    actorId: bot.id,
+    action: 'bot.token_rotated',
+    resourceType: 'bot',
+    resourceId: bot.id,
+    detail: { name: bot.name },
+  });
+  return { bot: publicBot(bot), token };
+}
+
+export async function reactivateBot(pool: Pool, id: string): Promise<void> {
+  const result = await pool.query<{ id: string; name: string }>(
+    `UPDATE bots SET revoked_at = NULL, updated_at = now() WHERE id = $1 AND revoked_at IS NOT NULL RETURNING id, name`,
+    [requireUuid(id, 'bot id')],
+  );
+  const row = result.rows[0];
+  if (!row) throw new UserError('That bot is not revoked.');
+  await writeAudit(pool, {
+    actorId: row.id,
+    action: 'bot.reactivated',
+    resourceType: 'bot',
+    resourceId: row.id,
+    detail: { name: row.name },
+  });
+}
+
+export async function updateBotById(
+  pool: Pool,
+  id: string,
+  patch: { name?: string; description?: string; capabilities?: string[] | string },
+): Promise<PublicBot> {
+  const current = await getBotById(pool, id);
+  if (!current) throw new UserError('Bot not found.');
+  const name = patch.name === undefined ? current.name : normalizeName(patch.name);
+  const description = patch.description === undefined ? current.description : normalizeDescription(patch.description);
+  const capabilities =
+    patch.capabilities === undefined ? current.capabilities : normalizeCapabilities(patch.capabilities);
+  try {
+    await pool.query(`UPDATE bots SET name = $2, description = $3, capabilities = $4, updated_at = now() WHERE id = $1`, [
+      current.id,
+      name,
+      description,
+      capabilities,
+    ]);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new UserError(`A bot named "${name}" already exists.`);
+    throw error;
+  }
+  await writeAudit(pool, {
+    actorId: current.id,
+    action: 'bot.updated',
+    resourceType: 'bot',
+    resourceId: current.id,
+    detail: { name },
+  });
+  return { id: current.id, name, description, capabilities };
+}
+
+export async function setClerkLink(
+  pool: Pool,
+  id: string,
+  link: { userId: string | null; email: string | null },
+): Promise<void> {
+  const bot = await getBotById(pool, id);
+  if (!bot) throw new UserError('Bot not found.');
+  const userId = link.userId?.trim() || null;
+  const email = link.email?.trim().toLowerCase() || null;
+  if (userId && !/^user_[A-Za-z0-9]+$/.test(userId)) {
+    throw new UserError('Clerk user id should look like user_abc123.');
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new UserError('Clerk email is not a valid email address.');
+  }
+  try {
+    await pool.query(`UPDATE bots SET clerk_user_id = $2, clerk_email = $3, updated_at = now() WHERE id = $1`, [
+      bot.id,
+      userId,
+      email,
+    ]);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new UserError('That Clerk user is already linked to another bot.');
+    throw error;
+  }
+  await writeAudit(pool, {
+    actorId: bot.id,
+    action: 'bot.clerk_linked',
+    resourceType: 'bot',
+    resourceId: bot.id,
+    detail: { linked: Boolean(userId || email) },
+  });
+}
+
+export async function resolveOAuthBot(
+  pool: Pool,
+  profile: { userId: string; email: string | null },
+): Promise<Actor> {
+  const byUser = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE clerk_user_id = $1`, [profile.userId]);
+  const linked = byUser.rows[0];
+  if (linked) {
+    if (linked.revoked_at) throw new UserError('The bot linked to this Clerk account is revoked.');
+    return toActor(linked);
+  }
+
+  if (profile.email) {
+    const byEmail = await pool.query<BotRecord>(
+      `SELECT ${BOT_COLUMNS} FROM bots
+       WHERE clerk_user_id IS NULL AND lower(clerk_email) = lower($1)
+       ORDER BY created_at
+       LIMIT 1`,
+      [profile.email],
+    );
+    const emailMatch = byEmail.rows[0];
+    if (emailMatch) {
+      if (emailMatch.revoked_at) throw new UserError('The bot reserved for this email is revoked.');
+      try {
+        await pool.query(`UPDATE bots SET clerk_user_id = $2, updated_at = now() WHERE id = $1 AND clerk_user_id IS NULL`, [
+          emailMatch.id,
+          profile.userId,
+        ]);
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
+      return toActor(emailMatch);
+    }
+  }
+
+  return provisionOAuthBot(pool, profile);
+}
+
+async function provisionOAuthBot(pool: Pool, profile: { userId: string; email: string | null }): Promise<Actor> {
+  const base = nameFromIdentity(profile.email, profile.userId);
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const name = attempt === 0 ? base : `${base.slice(0, 58)}-${attempt + 1}`;
+    const id = randomUUID();
+    const token = generateToken();
+    try {
+      await pool.query(
+        `INSERT INTO bots (id, name, description, capabilities, token_hash, token_prefix, clerk_user_id, clerk_email)
+         VALUES ($1, $2, $3, '{}', $4, $5, $6, $7)`,
+        [
+          id,
+          name,
+          profile.email ? `Signed in as ${profile.email}` : 'Signed in with Clerk',
+          hashToken(token),
+          tokenPrefix(token),
+          profile.userId,
+          profile.email,
+        ],
+      );
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const existing = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE clerk_user_id = $1`, [
+        profile.userId,
+      ]);
+      if (existing.rows[0] && !existing.rows[0].revoked_at) return toActor(existing.rows[0]);
+      continue;
+    }
+    await writeAudit(pool, {
+      actorId: id,
+      action: 'bot.created',
+      resourceType: 'bot',
+      resourceId: id,
+      detail: { name, via: 'oauth' },
+    });
+    const created = await getBotById(pool, id);
+    if (!created) throw new Error('provisioned bot disappeared');
+    return toActor(created);
+  }
+  throw new UserError('Could not provision a bot for this Clerk account.');
+}
+
+function nameFromIdentity(email: string | null, userId: string): string {
+  const local = (email?.split('@')[0] ?? 'clerk').toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+  const trimmed = local.slice(0, 40);
+  if (trimmed.length > 0 && /^[a-z0-9]/.test(trimmed)) return trimmed;
+  const suffix = userId.replace(/[^a-z0-9]/gi, '').slice(-6).toLowerCase() || 'bot';
+  return `clerk-${suffix}`;
+}
+
+export async function enqueueTestPing(pool: Pool, botId: string): Promise<string> {
+  const bot = await getBotById(pool, botId);
+  if (!bot || bot.revoked_at) throw new UserError('Bot not found.');
+  if (!bot.webhook_url || !bot.webhook_profile || !bot.webhook_secret_enc) {
+    throw new UserError('This bot has no doorbell webhook.');
+  }
+  const id = randomUUID();
+  const notice: DoorbellNotice = {
+    id,
+    type: 'doorbell.test',
+    occurred_at: new Date().toISOString(),
+    bot: { id: bot.id, name: bot.name },
+    from: { id: bot.id, name: bot.name },
+    resource: { type: 'doorbell', id },
+    thread_id: null,
+    preview: 'botbridge test ping',
+  };
+  await pool.query(`INSERT INTO doorbell_jobs (id, bot_id, event, body) VALUES ($1, $2, $3, $4)`, [
+    id,
+    bot.id,
+    notice.type,
+    renderDoorbellBody(bot.webhook_profile, notice),
+  ]);
+  await writeAudit(pool, {
+    actorId: bot.id,
+    action: 'doorbell.test',
+    resourceType: 'doorbell',
+    resourceId: id,
+    detail: { profile: bot.webhook_profile },
+  });
+  return id;
 }
 
 export async function directory(pool: Pool): Promise<PublicBot[]> {

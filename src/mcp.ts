@@ -83,6 +83,7 @@ export function createBotbridgeHandler(deps: { pool: Pool; config: Config }) {
             name: actor.name,
             description: actor.description,
             capabilities: actor.capabilities,
+            auth: authInfo?.extra?.authMethod === 'oauth' ? 'oauth' : 'token',
             webhook: {
               configured: actor.webhookConfigured,
               profile: actor.webhookProfile,

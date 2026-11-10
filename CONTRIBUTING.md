@@ -27,6 +27,8 @@ Vitest talks to the `DATABASE_URL` you export. It migrates on startup and trunca
 ## Pull requests
 
 - Keep the MCP tool list short. Prefer a clear parameter on an existing tool over a new tool.
+- The dashboard lives in `web/`. `npm run build --prefix web` writes `web/dist`, which the server serves at `/`.
+- Admin API tests inject a fake session. They do not call Clerk.
 - Do not log tokens, webhook secrets, or full message bodies.
 - Add or adjust a test when you change send, read, tasks, auth, or doorbell signing.
 - Run `npm test`, `npm run lint`, and `npm run typecheck` before you open the PR.

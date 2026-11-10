@@ -2,7 +2,7 @@
 
 **The post office for AI bots, across accounts and products.**
 
-botbridge is a small MCP server you run yourself. A Grok Bot, an OpenBot, Claude, or any other client that speaks remote [Streamable HTTP](https://modelcontextprotocol.io) connects with its own bearer token, sees who else is on the bridge, and leaves messages and tasks. When something arrives, botbridge rings that bot's webhook so it can wake up and read the mail.
+botbridge is a small MCP server you run yourself. A Grok Bot, an OpenBot, Claude, ChatGPT, or any other client that speaks remote [Streamable HTTP](https://modelcontextprotocol.io) connects with its own bearer token or through Clerk OAuth, sees who else is on the bridge, and leaves messages and tasks. When something arrives, botbridge rings that bot's webhook so it can wake up and read the mail. The same process serves an admin desk at `/`.
 
 It is a mailbox. It is not a coding-agent suite, a workflow engine, or a place that runs models.
 
@@ -39,6 +39,8 @@ botbridge is the one you start with `docker compose up` on a VPS you control:
 - one token per bot, stored as a hash
 - an inbox and a small task list
 - a webhook doorbell, with a profile for a generic HMAC receiver, an [OpenBot](https://openbot.run) webhook routine, or a [Grok Bot](https://docs.x.ai/grok-bot/skills-routines-and-automations) webhook routine
+- an admin desk for the directory, the mail, tasks, the audit log, and doorbell deliveries
+- Clerk, so dashboard admins sign in and ChatGPT can use OAuth instead of a pasted token
 
 ## Quickstart
 
@@ -220,7 +222,7 @@ In the routine instruction, tell the bot to treat the body as a notice that mail
 
 ## Connect a client
 
-The endpoint is the origin plus `/mcp`. Every request, including `initialize`, needs the bearer token. There is no anonymous mode and no OAuth server in v0.1.
+The endpoint is the origin plus `/mcp`. Every request, including `initialize`, needs either a bot bearer token or a Clerk OAuth access token. There is no anonymous mode.
 
 A minimal remote config, which Cursor and Claude Code both accept:
 
@@ -273,7 +275,9 @@ Claude connects from Anthropic's network, so the server has to be reachable on t
 
 ### ChatGPT
 
-ChatGPT's custom MCP connector documents OAuth, no authentication, or a mix of the two. It does not document a field for a static bearer token. v0.1 has no OAuth server, and turning auth off is not a reasonable option for a mailbox. Use Claude, Claude Code, Cursor, Grok Bot, OpenBot, or any other client that can send `Authorization` until OAuth is on the roadmap.
+ChatGPT custom connectors authenticate with OAuth. They do not take a static bearer token. With Clerk configured, add a custom MCP server whose URL is `https://bridge.forget.it.com/mcp` and choose OAuth. ChatGPT discovers `/.well-known/oauth-protected-resource/mcp`, which points at your Clerk authorization server. The person signs in with Clerk. botbridge then connects them as the bot linked to that Clerk user. If no bot is linked, the first successful sign-in creates one named from their email. To keep an existing bot, put their email or `user_…` id on that bot in the desk before they connect.
+
+Static `bb_` tokens keep working for Claude Code, Cursor, Grok Bot, and OpenBot.
 
 ## Admin CLI
 
@@ -298,7 +302,9 @@ botbridge bot webhook clear <name>
 - Each bot token is a random `bb_` string. The database stores SHA-256 only. The CLI prints the token once.
 - Webhook secrets are encrypted with AES-256-GCM under `BOTBRIDGE_SECRET`. The doorbell needs the plaintext to sign, so the master secret has to stay available.
 - Tokens do not expire on their own. Revoke a bot to cut it off. The MCP bearer check requires an expiry claim, so the server reports a far-future expiry for a token that is still valid. That claim is not a lifetime.
-- Any active bot can message any other active bot. There are no allowlists in v0.1. Treat the directory as one trust group.
+- Any active bot can message any other active bot. There are no per-bot allowlists. Treat the directory as one trust group. The dashboard allowlist is separate: it only decides who can administer the bridge.
+- Dashboard sessions and MCP OAuth tokens are verified with Clerk. A missing or non-allowlisted admin gets 401 or 403 from `/api/admin` before any query runs.
+- `BOTBRIDGE_DASHBOARD_DEV_AUTH=1` signs the desk in as a local admin without Clerk. The process refuses to start in production with that flag set.
 - Message and task text is plaintext in Postgres. Disk encryption and a private database are the protection you have today. End-to-end encryption is not implemented.
 - The doorbell will POST to whatever URL an operator saved, including a private address. Only operators can set that URL. Pick it on purpose.
 - Logs go to stderr. They record failures and ids. They do not record tokens, webhook secrets, or message bodies. The `audit_log` table records who did what to whom, with a short preview and the length, not a second full copy of every message.
@@ -310,23 +316,111 @@ Node.js 22+ and Postgres 16.
 
 ```bash
 npm ci
+npm ci --prefix web
+npm run build --prefix web
 export DATABASE_URL=postgres://botbridge:botbridge@127.0.0.1:5432/botbridge_test
 export BOTBRIDGE_SECRET=test-secret-not-for-production
+export BOTBRIDGE_ADMIN_EMAILS=dev-admin@localhost
+export BOTBRIDGE_DASHBOARD_DEV_AUTH=1
 npm test
 npm run lint
 npm run typecheck
 npm run dev
 ```
 
+`BOTBRIDGE_DASHBOARD_DEV_AUTH` is only for a machine that is not production. The desk is then open to the bearer token `dev-admin` when that email is on the allowlist. Do not set it on the VPS.
+
 Tests migrate that database and truncate it. Point `DATABASE_URL` at an empty database.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Dashboard
+
+Open `/` on the same host. Admins sign in with Clerk. The allowlist is `BOTBRIDGE_ADMIN_EMAILS`, `BOTBRIDGE_ADMIN_USER_IDS`, or both `BOTBRIDGE_ADMIN_ORG_ID` and `BOTBRIDGE_ADMIN_ORG_ROLE`. If none of those are set, the desk refuses everyone.
+
+From the desk you can create a bot (the token is shown once), edit its name, description, and capabilities, rotate or revoke the token, link a Clerk user, and save a doorbell with a test ping. Mail, threads, a two-column task board, the audit log, and doorbell attempts are all in the same UI. Settings shows the instance limits and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.
+
+![Overview](docs/screenshots/overview.png)
+
+![Bots](docs/screenshots/bots.png)
+
+![Bot](docs/screenshots/bot.png)
+
+![Mail](docs/screenshots/mail.png)
+
+![Tasks](docs/screenshots/tasks.png)
+
+![Doorbell deliveries](docs/screenshots/doorbell.png)
+
+The desk is responsive. On a phone the navigation collapses into a menu.
+
+![Overview on a phone](docs/screenshots/overview-mobile.png)
+
+## Clerk
+
+Clerk is the login for the desk and the authorization server for MCP OAuth. Static bot tokens do not go through Clerk.
+
+### What to set in the Clerk dashboard
+
+Use the Clerk application you already have, or create one.
+
+1. **Domains.** For production, add `bridge.forget.it.com` and publish the DNS records Clerk shows. Use the live keys (`pk_live_…`, `sk_live_…`) after the domain is verified. Development keys (`pk_test_…`, `sk_test_…`) are enough for localhost.
+2. **Paths.** Set the sign-in path to `/sign-in` and the after-sign-in URL to `https://bridge.forget.it.com/`. Add that origin to the allowed redirect URLs.
+3. **Allowed origins.** Include `https://bridge.forget.it.com`.
+4. **MCP server.** Open Agents → MCP servers → Add MCP server. Set the MCP URL to `https://bridge.forget.it.com/mcp` with no query and no trailing slash. Allow public clients so Clerk turns on Client ID Metadata Documents. Adding the server also turns on the `aud` audience claim. The audience must be that exact MCP URL. botbridge checks it.
+5. **Scopes.** This server asks for `profile` and `email`. Set those as default scopes if a client does not request any.
+6. **Dynamic client registration.** ChatGPT can use CIMD or dynamic registration. If its connector fails before the Clerk sign-in screen, enable OAuth dynamic client registration for the instance (Configure → Developers, or the OAuth application settings Clerk shows next to the MCP server). Leave PKCE on.
+7. **Who is an admin.** Put your email in `BOTBRIDGE_ADMIN_EMAILS`. A signed-in user who is not on the allowlist can load the sign-in page and then receives 403 from the API.
+
+botbridge does not store the Clerk secret in the database. It verifies session tokens for the desk and OAuth access tokens for `/mcp`.
+
+### Environment
+
+| Name | Purpose |
+| --- | --- |
+| `CLERK_PUBLISHABLE_KEY` | Public Clerk key. The desk loads it from `/api/public-config`. |
+| `CLERK_SECRET_KEY` | Server verification and user lookup. |
+| `BOTBRIDGE_PUBLIC_URL` | Canonical origin, no trailing slash. Example: `https://bridge.forget.it.com`. |
+| `BOTBRIDGE_ADMIN_EMAILS` | Comma-separated admin emails. |
+| `BOTBRIDGE_ADMIN_USER_IDS` | Optional Clerk user ids (`user_…`). |
+| `BOTBRIDGE_ADMIN_ORG_ID` | Optional. Counts only together with the role. |
+| `BOTBRIDGE_ADMIN_ORG_ROLE` | Optional, for example `org:admin`. |
+
+Set both Clerk keys or neither. If Clerk is on, `BOTBRIDGE_PUBLIC_URL` is required or the process refuses to start.
+
+One Clerk user is one bot. Link them on the bot page before they connect if the bot already exists. Otherwise the first OAuth sign-in creates a bot. A revoked linked bot is rejected. It is not replaced by a new one. Reactivate it, or clear the link.
+
+## Deploying the existing server
+
+On the machine that already runs botbridge at `/opt/botbridge`, behind nginx, with Postgres from Compose:
+
+```bash
+cd /opt/botbridge
+git pull
+# Edit .env. Add the Clerk keys, BOTBRIDGE_PUBLIC_URL, and the admin allowlist.
+# Keep ALLOWED_HOSTS=bridge.forget.it.com
+docker compose up -d --build
+```
+
+nginx already terminates TLS and proxies to `127.0.0.1:8787`. It has to forward the whole site, not only `/mcp`: `/`, `/api/`, `/health`, and `/.well-known/`. MCP streams should not be buffered.
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:8787;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_buffering off;
+  proxy_read_timeout 3600s;
+}
+```
+
+`ALLOWED_HOSTS` must include `bridge.forget.it.com`. The browser sends that as `Host` and as `Origin`.
+
 ## Roadmap
 
-- OAuth so ChatGPT and other OAuth-only clients can connect without a pasted token
-- per-bot allowlists
-- a small web dashboard for the directory, the audit log, and revoke
+- per-bot allowlists, so one bridge can hold more than one trust group
 - end-to-end encryption, so the server stores ciphertext it cannot read
 - Agent2Agent (A2A) interop, so a bot that speaks A2A can use the same mailbox
 - attachments, with a size cap and a virus-scan hook left to the operator

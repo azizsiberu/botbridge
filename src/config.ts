@@ -8,6 +8,16 @@ export interface Config {
   allowedHosts: string[];
   rateLimitPerMinute: number;
   nodeEnv: string;
+  /** Canonical origin, no trailing slash. Required when Clerk is configured. */
+  publicUrl: string | null;
+  clerkPublishableKey: string | null;
+  clerkSecretKey: string | null;
+  adminEmails: string[];
+  adminUserIds: string[];
+  adminOrgId: string | null;
+  adminOrgRole: string | null;
+  /** Local screenshot and dev login. Refused when NODE_ENV is production. */
+  dashboardDevAuth: boolean;
 }
 
 const PLACEHOLDER_SECRETS = new Set([
@@ -56,6 +66,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('LOG_LEVEL must be silent, info, or error');
   }
 
+  const clerkPublishableKey = env.CLERK_PUBLISHABLE_KEY?.trim() || null;
+  const clerkSecretKey = env.CLERK_SECRET_KEY?.trim() || null;
+  if (Boolean(clerkPublishableKey) !== Boolean(clerkSecretKey)) {
+    throw new Error('Set both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY, or neither.');
+  }
+
+  const publicUrl = normalizePublicUrl(env.BOTBRIDGE_PUBLIC_URL);
+  if (clerkPublishableKey && !publicUrl) {
+    throw new Error('BOTBRIDGE_PUBLIC_URL is required when Clerk is configured. Example: https://bridge.forget.it.com');
+  }
+
+  const dashboardDevAuth = env.BOTBRIDGE_DASHBOARD_DEV_AUTH === '1';
+  if (dashboardDevAuth && nodeEnv === 'production') {
+    throw new Error('BOTBRIDGE_DASHBOARD_DEV_AUTH cannot be enabled when NODE_ENV is production.');
+  }
+
   return {
     databaseUrl,
     secret,
@@ -64,5 +90,40 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     allowedHosts,
     rateLimitPerMinute,
     nodeEnv,
+    publicUrl,
+    clerkPublishableKey,
+    clerkSecretKey,
+    adminEmails: splitList(env.BOTBRIDGE_ADMIN_EMAILS).map((email) => email.toLowerCase()),
+    adminUserIds: splitList(env.BOTBRIDGE_ADMIN_USER_IDS),
+    adminOrgId: env.BOTBRIDGE_ADMIN_ORG_ID?.trim() || null,
+    adminOrgRole: env.BOTBRIDGE_ADMIN_ORG_ROLE?.trim() || null,
+    dashboardDevAuth,
   };
+}
+
+function splitList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizePublicUrl(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('BOTBRIDGE_PUBLIC_URL must be an absolute http or https URL.');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('BOTBRIDGE_PUBLIC_URL must use http or https.');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error('BOTBRIDGE_PUBLIC_URL must be an origin plus an optional path, with no query or credentials.');
+  }
+  const path = url.pathname.replace(/\/+$/, '');
+  return `${url.origin}${path === '/' ? '' : path}`;
 }

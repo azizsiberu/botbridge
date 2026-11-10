@@ -1,6 +1,6 @@
 {
   "name": "botbridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The post office for AI bots, across accounts and products.",
   "type": "module",
   "license": "MIT",
@@ -29,6 +29,8 @@
     "e2e": "tsx scripts/e2e.ts"
   },
   "dependencies": {
+    "@clerk/backend": "^3.27.0",
+    "@clerk/mcp-tools": "^0.9.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/express": "2.0.2",
     "@modelcontextprotocol/node": "2.1.2",

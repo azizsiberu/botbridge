@@ -1,13 +1,31 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { corsHeaders, fetchClerkAuthorizationServerMetadata, generateClerkProtectedResourceMetadata } from '@clerk/mcp-tools/server';
 import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import type { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
+import { adminRouter } from './admin-routes.js';
 import { createTokenVerifier } from './auth.js';
 import type { Config } from './config.js';
 import type { Pool } from './db.js';
 import { log } from './log.js';
 import { createBotbridgeHandler } from './mcp.js';
+import { createAdminAuth, createClerkDirectory, createOAuthVerifier, type AdminAuth, type ClerkDirectory, type OAuthVerifier } from './identity.js';
 import { consumeRate } from './store.js';
 import { VERSION } from './version.js';
+
+export interface AppDeps {
+  pool: Pool;
+  config: Config;
+  adminAuth?: AdminAuth;
+  oauth?: OAuthVerifier | null;
+  directory?: ClerkDirectory | null;
+}
+
+export function webDistDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist');
+}
 
 function countToolCalls(body: unknown): number {
   const items = Array.isArray(body) ? body : [body];
@@ -20,12 +38,16 @@ function countToolCalls(body: unknown): number {
   return count;
 }
 
-export function createApp(deps: { pool: Pool; config: Config }) {
+export function createApp(deps: AppDeps) {
   const { pool, config } = deps;
+  const oauth = deps.oauth === undefined ? createOAuthVerifier(config) : deps.oauth;
+  const adminAuth = deps.adminAuth ?? createAdminAuth(config);
+  const directory = deps.directory === undefined ? createClerkDirectory(config) : deps.directory;
   const app = createMcpExpressApp({
     host: config.host,
     allowedHosts: config.allowedHosts,
-    jsonLimit: '256kb',
+    allowedOrigins: config.allowedHosts,
+    jsonLimit: '1mb',
   });
 
   app.get('/health', async (_req: Request, res: Response) => {
@@ -38,20 +60,35 @@ export function createApp(deps: { pool: Pool; config: Config }) {
     }
   });
 
-  app.get('/', (_req: Request, res: Response) => {
-    res.status(200).json({
-      service: 'botbridge',
+  app.get('/api/public-config', (_req: Request, res: Response) => {
+    res.json({
       version: VERSION,
-      mcp: '/mcp',
-      health: '/health',
+      publicUrl: config.publicUrl,
+      clerkPublishableKey: config.clerkPublishableKey,
+      devAuth: config.dashboardDevAuth,
     });
+  });
+
+  mountOAuthMetadata(app, config);
+
+  app.use('/api/admin', adminRouter({ pool, config, adminAuth, directory }));
+  app.use('/api', (error: unknown, _req: Request, res: Response, next: (error?: unknown) => void) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    log('error', 'admin api failed', { error: error instanceof Error ? error.message : 'unknown' });
+    res.status(500).json({ error: 'internal_error' });
   });
 
   const handler = createBotbridgeHandler({ pool, config });
   const nodeHandler = toNodeHandler(handler, {
     onerror: (error) => log('error', 'mcp handler failed', { error: error.message }),
   });
-  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool) });
+  const resourceMetadataUrl = config.publicUrl && config.clerkPublishableKey
+    ? `${config.publicUrl}/.well-known/oauth-protected-resource/mcp`
+    : undefined;
+  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth), resourceMetadataUrl });
 
   app.all('/mcp', auth, async (req: Request, res: Response) => {
     try {
@@ -77,5 +114,69 @@ export function createApp(deps: { pool: Pool; config: Config }) {
     }
   });
 
+  const indexFile = join(webDistDir(), 'index.html');
+  if (existsSync(indexFile)) {
+    app.use(express.static(webDistDir(), { index: false }));
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        next();
+        return;
+      }
+      if (req.path.startsWith('/api') || req.path.startsWith('/mcp') || req.path === '/health' || req.path.startsWith('/.well-known')) {
+        next();
+        return;
+      }
+      res.sendFile(indexFile);
+    });
+  } else {
+    app.get('/', (_req: Request, res: Response) => {
+      res.status(200).json({
+        service: 'botbridge',
+        version: VERSION,
+        mcp: '/mcp',
+        health: '/health',
+        dashboard: 'not built',
+      });
+    });
+  }
+
   return { app, handler };
+}
+
+function mountOAuthMetadata(app: ReturnType<typeof createMcpExpressApp>, config: Config): void {
+  if (!config.clerkPublishableKey || !config.publicUrl) return;
+  const resourceUrl = `${config.publicUrl}/mcp`;
+  const document = () =>
+    generateClerkProtectedResourceMetadata({
+      publishableKey: config.clerkPublishableKey!,
+      resourceUrl,
+      properties: {
+        scopes_supported: ['profile', 'email'],
+        bearer_methods_supported: ['header'],
+      },
+    });
+  const send = (res: Response, body: unknown) => {
+    res.set(corsHeaders);
+    res.json(body);
+  };
+  app.get('/.well-known/oauth-protected-resource', (_req, res) => send(res, document()));
+  app.get('/.well-known/oauth-protected-resource/mcp', (_req, res) => send(res, document()));
+  app.get('/.well-known/oauth-authorization-server', async (_req, res) => {
+    try {
+      const metadata = await fetchClerkAuthorizationServerMetadata({ publishableKey: config.clerkPublishableKey! });
+      send(res, metadata);
+    } catch (error) {
+      log('error', 'clerk metadata failed', { error: error instanceof Error ? error.message : 'unknown' });
+      res.status(502).json({ error: 'clerk_metadata_unavailable' });
+    }
+  });
+  app.options('/.well-known/oauth-protected-resource', (_req, res) => {
+    res.set(corsHeaders).status(204).end();
+  });
+  app.options('/.well-known/oauth-protected-resource/mcp', (_req, res) => {
+    res.set(corsHeaders).status(204).end();
+  });
+  app.options('/.well-known/oauth-authorization-server', (_req, res) => {
+    res.set(corsHeaders).status(204).end();
+  });
 }

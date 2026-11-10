@@ -1,0 +1,70 @@
+@import "tailwindcss";
+@import "@fontsource/outfit/latin-400.css";
+@import "@fontsource/outfit/latin-500.css";
+@import "@fontsource/outfit/latin-600.css";
+@import "@fontsource/fraunces/latin-600.css";
+@import "@fontsource/fraunces/latin-600-italic.css";
+
+:root {
+  color-scheme: light;
+  --bg: #f3efe4;
+  --bg-2: #fffdf8;
+  --bg-3: #e7e0d0;
+  --ink: #1a2118;
+  --muted: #5e685c;
+  --line: #e0d7c4;
+  --accent: #4f6b12;
+  --accent-ink: #172006;
+  --chip: #e7f4a8;
+  --danger: #a32016;
+  --ok: #1c7a4d;
+  --warn: #8a5a10;
+  --shadow: 0 18px 50px rgba(48, 42, 22, 0.08);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #101410;
+  --bg-2: #171d17;
+  --bg-3: #222922;
+  --ink: #e8eedf;
+  --muted: #a3b09a;
+  --line: #2c352b;
+  --accent: #d6f25c;
+  --accent-ink: #172006;
+  --chip: #24300d;
+  --danger: #ff8d78;
+  --ok: #8ee0b2;
+  --warn: #f0c36a;
+  --shadow: none;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 500px at 100% -10%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 50%),
+    var(--bg);
+  color: var(--ink);
+  font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.serif {
+  font-family: Fraunces, ui-serif, Georgia, serif;
+}
+
+.chart-bar {
+  transform-origin: bottom;
+}
