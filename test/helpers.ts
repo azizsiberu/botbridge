@@ -3,7 +3,7 @@ import { Client, type CallToolResult } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { loadConfig, type Config } from '../src/config.js';
 import { createPool, type Pool } from '../src/db.js';
-import { createApp } from '../src/http.js';
+import { createApp, type AppDeps } from '../src/http.js';
 import { migrate } from '../src/migrate.js';
 import { addBot } from '../src/store.js';
 
@@ -22,11 +22,11 @@ export interface TestServer {
   close: () => Promise<void>;
 }
 
-export async function listenForTests(overrides: Partial<Config> = {}): Promise<TestServer> {
+export async function listenForTests(overrides: Partial<Config> = {}, extras: Partial<AppDeps> = {}): Promise<TestServer> {
   const config = testConfig(overrides);
   const pool = createPool(config);
   await migrate(pool);
-  const { app, handler } = createApp({ pool, config });
+  const { app, handler } = createApp({ pool, config, ...extras });
   const server: Server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve, reject) => {
     server.once('listening', () => resolve());

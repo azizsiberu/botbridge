@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { UserError } from './errors.js';
 import { migrate } from './migrate.js';
+import { operatorOwnerId, reconcileTenancy } from './tenancy.js';
 import { start } from './serve.js';
 import {
   addBot,
@@ -58,6 +59,7 @@ async function withDb<T>(fn: (pool: ReturnType<typeof createPool>, secret: strin
   const pool = createPool(config);
   try {
     await migrate(pool);
+    await reconcileTenancy(pool, config);
     return await fn(pool, config.secret);
   } finally {
     await pool.end();
@@ -72,7 +74,11 @@ async function botCommand(args: string[]): Promise<void> {
     const description = flag(args, '--description') ?? '';
     const capabilities = flag(args, '--capabilities') ?? '';
     if (args.length > 0) throw new UserError(`Unexpected argument: ${args[0]}`);
-    const created = await withDb((pool) => addBot(pool, { name, description, capabilities }));
+    const created = await withDb(async (pool) => {
+      const config = loadConfig();
+      const ownerUserId = await operatorOwnerId(pool, config.legacyOwnerEmail);
+      return addBot(pool, { name, description, capabilities, ownerUserId });
+    });
     process.stdout.write(
       `created\nname: ${created.bot.name}\nid: ${created.bot.id}\ntoken: ${created.token}\n\nSave this token now. It cannot be shown again.\n`,
     );
@@ -175,6 +181,7 @@ async function main(argv: string[]): Promise<void> {
     const pool = createPool(config);
     try {
       const applied = await migrate(pool);
+      await reconcileTenancy(pool, config);
       process.stdout.write(applied.length === 0 ? 'migrations up to date\n' : `applied ${applied.join(', ')}\n`);
     } finally {
       await pool.end();

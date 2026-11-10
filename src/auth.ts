@@ -4,33 +4,81 @@ import {
   type AuthInfo,
   type OAuthTokenVerifier,
 } from '@modelcontextprotocol/server';
+import { UserError } from './errors.js';
+import type { OAuthVerifier } from './identity.js';
 import type { Pool } from './db.js';
 import { TOKEN_LIFETIME_SECONDS } from './limits.js';
-import { authenticateBot, type Actor } from './store.js';
+import { accountIdForClerk } from './tenancy.js';
+import { actorById, authenticateBot, type Actor } from './store.js';
 
-export function createTokenVerifier(pool: Pool): OAuthTokenVerifier {
+export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null, selectionUrl?: string | null): OAuthTokenVerifier {
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
-      const actor = await authenticateBot(pool, token);
-      if (!actor) {
-        throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
+      if (token.startsWith('bb_')) {
+        const actor = await authenticateBot(pool, token);
+        if (!actor) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
+        return botAuth(token, actor, 'token', Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SECONDS, ['bot']);
       }
-      return {
-        token,
-        clientId: actor.id,
-        scopes: ['bot'],
-        // The SDK rejects tokens with no expiry. These tokens are revoked, not expired.
-        expiresAt: Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SECONDS,
-        extra: {
-          botId: actor.id,
-          botName: actor.name,
-          description: actor.description,
-          capabilities: actor.capabilities,
-          webhookConfigured: actor.webhookConfigured,
-          webhookProfile: actor.webhookProfile,
-        },
-      };
+      if (!oauth) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
+      const profile = await oauth.verifyAccessToken(token);
+      if (!profile) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Clerk rejected this access token');
+      try {
+        const accountId = await accountIdForClerk(pool, profile.userId, profile.email);
+        if (!accountId) {
+          throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
+        }
+        const clientId = profile.clientId || 'default';
+        const grant = await pool.query<{ bot_id: string }>(
+          `SELECT bot_id FROM oauth_grants
+           WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
+          [accountId, clientId],
+        );
+        const botId = grant.rows[0]?.bot_id;
+        if (!botId) {
+          const choose = selectionUrl ? `${selectionUrl}?client_id=${encodeURIComponent(clientId)}` : '/oauth/choose';
+          throw new UserError(`Choose which bot this connection uses: ${choose}`);
+        }
+        const actor = await actorById(pool, botId);
+        if (!actor || actor.ownerUserId !== accountId) {
+          throw new UserError('The bot bound to this connection is no longer available.');
+        }
+        return {
+          ...botAuth(token, actor, 'oauth', profile.expiresAt, profile.scopes.length > 0 ? profile.scopes : ['profile', 'email']),
+          extra: {
+            ...botExtra(actor),
+            authMethod: 'oauth',
+            clerkUserId: profile.userId,
+          },
+        };
+      } catch (error) {
+        if (error instanceof UserError) throw new OAuthError(OAuthErrorCode.InvalidToken, error.message);
+        throw error;
+      }
     },
+  };
+}
+
+function botAuth(token: string, actor: Actor, method: 'token' | 'oauth', expiresAt: number, scopes: string[]): AuthInfo {
+  return {
+    token,
+    clientId: actor.id,
+    scopes,
+    // Static bot tokens do not expire until revoke. The SDK still requires expiresAt.
+    expiresAt,
+    extra: { ...botExtra(actor), authMethod: method },
+  };
+}
+
+function botExtra(actor: Actor): Record<string, unknown> {
+  return {
+    botId: actor.id,
+    botName: actor.name,
+    description: actor.description,
+    capabilities: actor.capabilities,
+    webhookConfigured: actor.webhookConfigured,
+    webhookProfile: actor.webhookProfile,
+    ownerUserId: actor.ownerUserId,
+    ownerName: actor.ownerName,
   };
 }
 
@@ -50,5 +98,7 @@ export function actorFromAuth(authInfo: AuthInfo | undefined): Actor {
     capabilities,
     webhookConfigured: extra.webhookConfigured === true,
     webhookProfile: profile === 'generic' || profile === 'openbot' || profile === 'grok' ? profile : null,
+    ownerUserId: typeof extra.ownerUserId === 'string' ? extra.ownerUserId : '',
+    ownerName: typeof extra.ownerName === 'string' ? extra.ownerName : '',
   };
 }

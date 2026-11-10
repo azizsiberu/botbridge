@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { signDoorbell } from '../src/crypto.js';
 import { processDueJobs } from '../src/doorbell.js';
 import { sendMessage, setWebhook, type Actor } from '../src/store.js';
+import { UNASSIGNED_USER_ID } from '../src/tenancy.js';
 import { issueBot, listenForTests, resetDb, type TestServer } from './helpers.js';
 
 interface Captured {
@@ -154,5 +155,7 @@ function bobActor(bot: { id: string; name: string }) {
     capabilities: [] as string[],
     webhookConfigured: false,
     webhookProfile: null,
+    ownerUserId: UNASSIGNED_USER_ID,
+    ownerName: 'Unassigned',
   };
 }

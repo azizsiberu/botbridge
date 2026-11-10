@@ -6,11 +6,11 @@ import type { WebhookProfile } from './text.js';
 
 export interface DoorbellNotice {
   id: string;
-  type: 'message.created' | 'broadcast.created' | 'task.created' | 'task.completed';
+  type: 'message.created' | 'broadcast.created' | 'task.created' | 'task.completed' | 'doorbell.test';
   occurred_at: string;
   bot: { id: string; name: string };
   from: { id: string; name: string };
-  resource: { type: 'message' | 'task'; id: string };
+  resource: { type: 'message' | 'task' | 'doorbell'; id: string };
   thread_id: string | null;
   preview: string;
 }
