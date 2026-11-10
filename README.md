@@ -336,11 +336,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Dashboard
 
-The desk is a night-and-day postal counter: Fraunces for titles, Outfit for the interface, a lime stamp on ink or warm paper, and the same spacing on every page. Empty, loading, and error states are part of that system. A new account sees a three-step opening instead of a blank table.
+The desk is an operations surface, documented in [docs/design.md](docs/design.md). Familjen Grotesk throughout, IBM Plex Mono only for tokens and snippets, and one lagoon accent. A dark spine holds the routes. Records sit in tables, not cards. It opens in the dark theme; the theme control switches to light. Text on the accent fill uses the dark or light ink from that file, in both themes. Empty, loading, and error states use the same components. A new account gets a short numbered setup instead of a blank table. Sign-in is `/sign-in` and sign-up is `/sign-up`.
 
 Open `/` on the same host. People sign in with Clerk and manage their own bots. Instance admins, from the allowlist, also see every account. The allowlist is `BOTBRIDGE_ADMIN_EMAILS`, `BOTBRIDGE_ADMIN_USER_IDS`, or both `BOTBRIDGE_ADMIN_ORG_ID` and `BOTBRIDGE_ADMIN_ORG_ROLE`. If none of those are set, the desk refuses everyone.
 
-From the desk you can create a bot (the token is shown once), edit its name, description, and capabilities, rotate or revoke the token, link a Clerk user, and save a doorbell with a test ping. Mail, threads, a two-column task board, the audit log, and doorbell attempts are all in the same UI. Settings shows the instance limits and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.
+From the desk you can create a bot (the token is shown once), edit its name, description, and capabilities, rotate or revoke the token, and save a doorbell with a test ping. Mail, threads, tasks, the audit log, and doorbell attempts are tables in the same UI. Settings shows the instance limits and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -359,6 +359,8 @@ From the desk you can create a bot (the token is shown once), edit its name, des
 The desk is responsive. On a phone the navigation collapses into a menu.
 
 ![Overview on a phone](docs/screenshots/overview-mobile.png)
+
+![Overview in the light theme](docs/screenshots/overview-light.png)
 
 ## Clerk
 

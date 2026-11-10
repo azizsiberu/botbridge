@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, type Bot, type Delivery, type Guide } from '../api';
-import { PageTitle } from '../Shell';
-import { Button, Card, CopyButton, ErrorNote, Field, Pill, control } from '../ui';
+import { Button, CopyButton, DataTable, ErrorNote, Field, PageTitle, Status, control } from '../ui';
 import { TokenOnce } from './Bots';
 
 const profiles = ['generic', 'openbot', 'grok'] as const;
@@ -32,7 +31,6 @@ export function BotPage() {
         setCapabilities(body.bot.capabilities.join(', '));
         setUrl(body.bot.webhook?.url ?? '');
         setProfile((body.bot.webhook?.profile as (typeof profiles)[number]) ?? 'generic');
-        setReach([]);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
     api<Guide>(`/api/admin/bots/${id}/connect`).then(setGuide).catch(() => undefined);
@@ -45,18 +43,23 @@ export function BotPage() {
     load();
   }, [id]);
 
-  if (!bot) return error ? <ErrorNote message={error} /> : <p className="text-[var(--muted)]">Loading bot…</p>;
+  if (!bot) return error ? <ErrorNote message={error} /> : <p className="loading">Loading bot.</p>;
 
   return (
     <div>
-      <Link to="/bots" className="text-sm text-[var(--muted)]">← Directory</Link>
+      <p className="back"><Link to="/bots">Bots</Link></p>
       <PageTitle
-        kicker={bot.status}
         title={bot.name}
+        lede={
+          <>
+            <Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status>
+            {bot.description ? <span className="mt-2 block">{bot.description}</span> : null}
+          </>
+        }
         action={
-          <div className="flex gap-2">
+          <>
             <Button
-              tone="ghost"
+              tone="secondary"
               onClick={() => {
                 api<{ token: string; guide: Guide }>(`/api/admin/bots/${bot.id}/rotate-token`, { method: 'POST' })
                   .then((body) => setIssued({ id: bot.id, name: bot.name, token: body.token, guide: body.guide }))
@@ -74,15 +77,15 @@ export function BotPage() {
                 Reactivate
               </Button>
             )}
-          </div>
+          </>
         }
       />
       {error ? <div className="mb-4"><ErrorNote message={error} /></div> : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="p-5">
-          <h2 className="serif text-2xl">Profile</h2>
+      <div className="split">
+        <section className="panel">
+          <h2>Profile</h2>
           <form
-            className="mt-4 grid gap-3"
+            className="stack"
             onSubmit={(event) => {
               event.preventDefault();
               api(`/api/admin/bots/${bot.id}`, { method: 'PATCH', body: JSON.stringify({ name, description, capabilities }) })
@@ -93,15 +96,14 @@ export function BotPage() {
             <Field label="Name"><input className={control} value={name} onChange={(event) => setName(event.target.value)} /></Field>
             <Field label="Description"><textarea className={control} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
             <Field label="Capabilities"><input className={control} value={capabilities} onChange={(event) => setCapabilities(event.target.value)} /></Field>
-            <div className="flex gap-2">{bot.capabilities.map((item) => <Pill key={item}>{item}</Pill>)}</div>
             <div><Button type="submit">Save profile</Button></div>
           </form>
-        </Card>
-        <Card className="p-5">
-          <h2 className="serif text-2xl">Doorbell</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Optional wake-up when mail or a task arrives. generic and openbot are HMAC signed. grok sends the routine key as a bearer token.</p>
+        </section>
+        <section className="panel">
+          <h2>Doorbell</h2>
+          <p className="muted">Optional wake-up when mail or a task arrives. generic and openbot are HMAC signed. grok sends the routine key as a bearer token.</p>
           <form
-            className="mt-4 grid gap-3"
+            className="stack mt-4"
             onSubmit={(event) => {
               event.preventDefault();
               setWebhookSecret(null);
@@ -126,16 +128,16 @@ export function BotPage() {
             <Field label="Secret"><input className={control} value={secret} onChange={(event) => setSecret(event.target.value)} placeholder="Leave blank to generate a generic secret" /></Field>
             {webhookSecret ? (
               <div>
-                <p className="mb-2 text-sm text-[var(--muted)]">Generated secret, shown once.</p>
-                <pre className="overflow-auto rounded-xl bg-[var(--bg)] p-3 text-sm">{webhookSecret}</pre>
+                <p className="muted">Generated secret, shown once.</p>
+                <pre className="code">{webhookSecret}</pre>
                 <div className="mt-2"><CopyButton value={webhookSecret} label="Copy secret" /></div>
               </div>
             ) : null}
-            {ping ? <Pill tone={ping.state === 'delivered' ? 'ok' : 'danger'}>{ping.state} {ping.last_status ?? ''} {ping.last_error ?? ''}</Pill> : null}
-            <div className="flex flex-wrap gap-2">
+            {ping ? <Status tone={ping.state === 'delivered' ? 'ok' : 'danger'}>{[ping.state, ping.last_status ?? '', ping.last_error ?? ''].filter(Boolean).join(' ')}</Status> : null}
+            <div className="button-row">
               <Button type="submit">Save webhook</Button>
               <Button
-                tone="ghost"
+                tone="secondary"
                 onClick={() => {
                   api<{ delivery: Delivery }>(`/api/admin/bots/${bot.id}/webhook/test`, { method: 'POST' })
                     .then((body) => setPing(body.delivery))
@@ -145,29 +147,36 @@ export function BotPage() {
                 Send test ping
               </Button>
               <Button tone="danger" onClick={() => api(`/api/admin/bots/${bot.id}/webhook`, { method: 'DELETE' }).then(() => { setUrl(''); load(); }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'))}>
-                Clear
+                Clear webhook
               </Button>
             </div>
           </form>
-        </Card>
-        <Card className="p-5">
-          <h2 className="serif text-2xl">Who this bot can reach</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Same-account bots are open. Other names appear only after a connection is approved.</p>
-          <ul className="mt-4 grid gap-2">
-            {reach.map((item) => (
-              <li key={item.name} className="flex items-center justify-between text-sm">
-                <span>{item.name}</span>
-                <span className="text-[var(--muted)]">{item.relation.replace('_', ' ')} · {item.owner.display_name}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card className="p-5">
-          <h2 className="serif text-2xl">Connect</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Static tokens still work. OAuth clients use the URL alone. Paste a rotated token into the bearer snippets yourself — this page does not store it.</p>
-          {guide ? <GuideBlock guide={guide} /> : <p className="mt-3 text-sm text-[var(--muted)]">Loading snippets…</p>}
-        </Card>
+        </section>
       </div>
+      <section className="section">
+        <h2>Who this bot can reach</h2>
+        <p className="lede mb-3">Same-account bots are open. Other names appear only after a connection is approved.</p>
+        <DataTable label="Reachable bots">
+          <thead>
+            <tr><th>Name</th><th>Relation</th><th>Owner</th></tr>
+          </thead>
+          <tbody>
+            {reach.length === 0 ? <tr><td colSpan={3}>No other bots yet.</td></tr> : null}
+            {reach.map((item) => (
+              <tr key={item.name}>
+                <td>{item.name}</td>
+                <td>{item.relation.replaceAll('_', ' ')}</td>
+                <td>{item.owner.display_name}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+      <section className="section panel">
+        <h2>Connect</h2>
+        <p className="muted">Static tokens still work. OAuth clients use the URL alone. Paste a rotated token into the bearer snippets yourself. This page does not store it.</p>
+        {guide ? <GuideBlock guide={guide} /> : <p className="loading mt-3">Loading snippets.</p>}
+      </section>
       {issued ? <TokenOnce issued={issued} onClose={() => setIssued(null)} /> : null}
     </div>
   );
@@ -185,15 +194,15 @@ function GuideBlock({ guide }: { guide: Guide }) {
   ] as const;
   return (
     <div className="mt-4">
-      <p className="mb-2 font-mono text-xs text-[var(--muted)]">{guide.mcpUrl}</p>
-      <div className="mb-3 flex flex-wrap gap-2">
+      <p className="url">{guide.mcpUrl}</p>
+      <div className="tabs mt-3" role="tablist">
         {tabs.map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={tab === key ? 'text-sm font-medium' : 'text-sm text-[var(--muted)]'}>
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
             {label}
           </button>
         ))}
       </div>
-      <pre className="max-h-64 overflow-auto rounded-xl bg-[var(--bg)] p-3 text-xs leading-relaxed whitespace-pre-wrap">{guide.snippets[tab]}</pre>
+      <pre className="code">{guide.snippets[tab]}</pre>
       <div className="mt-3"><CopyButton value={guide.snippets[tab] ?? ''} label="Copy snippet" /></div>
     </div>
   );
