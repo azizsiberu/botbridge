@@ -1,4 +1,4 @@
-import { ClerkProvider, SignIn, useAuth } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, useAuth } from '@clerk/react';
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
@@ -38,7 +38,7 @@ export function App() {
     );
   }
   return (
-    <ClerkProvider publishableKey={config.clerkPublishableKey}>
+    <ClerkProvider publishableKey={config.clerkPublishableKey} signInUrl="/sign-in" signUpUrl="/sign-up">
       <ClerkGate version={config.version} />
     </ClerkProvider>
   );
@@ -52,17 +52,20 @@ function ClerkGate({ version }: { version: string }) {
   }, [getToken]);
   if (!isLoaded) return <Centered title="Opening the desk…" body="Checking your Clerk session." />;
   if (!isSignedIn) {
-    if (location.pathname !== '/sign-in') return <Navigate to="/sign-in" replace />;
+    const authScreen = location.pathname === '/sign-up'
+      ? <SignUp routing="hash" signInUrl="/sign-in" />
+      : <SignIn routing="hash" signUpUrl="/sign-up" />;
+    if (location.pathname !== '/sign-in' && location.pathname !== '/sign-up') return <Navigate to="/sign-in" replace />;
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-10">
         <div>
           <p className="serif mb-6 text-center text-4xl italic">botbridge</p>
-          <SignIn routing="hash" />
+          {authScreen}
         </div>
       </div>
     );
   }
-  if (location.pathname === '/sign-in') return <Navigate to="/" replace />;
+  if (location.pathname === '/sign-in' || location.pathname === '/sign-up') return <Navigate to="/" replace />;
   return <Desk version={version} />;
 }
 

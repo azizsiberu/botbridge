@@ -369,7 +369,7 @@ Clerk is the login for the desk and the authorization server for MCP OAuth. Stat
 Use the Clerk application you already have, or create one.
 
 1. **Domains.** For production, add `bridge.forget.it.com` and publish the DNS records Clerk shows. Use the live keys (`pk_live_…`, `sk_live_…`) after the domain is verified. Development keys (`pk_test_…`, `sk_test_…`) are enough for localhost.
-2. **Paths.** Set the sign-in path to `/sign-in` and the after-sign-in URL to `https://bridge.forget.it.com/`. Add that origin to the allowed redirect URLs.
+2. **Paths.** Set the sign-in path to `/sign-in` and the sign-up path to `/sign-up`. Set the after-sign-in and after-sign-up URLs to `https://bridge.forget.it.com/`. Add that origin to the allowed redirect URLs.
 3. **Allowed origins.** Include `https://bridge.forget.it.com`.
 4. **MCP server.** Open Agents → MCP servers → Add MCP server. Set the MCP URL to `https://bridge.forget.it.com/mcp` with no query and no trailing slash. Allow public clients so Clerk turns on Client ID Metadata Documents. Adding the server also turns on the `aud` audience claim. The audience must be that exact MCP URL. botbridge checks it.
 5. **Scopes.** This server asks for `profile` and `email`. Set those as default scopes if a client does not request any.
