@@ -33,24 +33,24 @@ export function SettingsPage() {
               ))}
             </ul>
           </Card>
-          <Card className="p-5 lg:col-span-2">
+          {settings.allowlist ? <Card className="p-5 lg:col-span-2">
             <h2 className="serif text-2xl">Admin allowlist</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">Only these accounts can open the desk. Change them in the environment and restart.</p>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
               <div>
                 <p className="text-[var(--muted)]">Emails</p>
-                <p>{settings.allowlist.emails.join(', ') || 'None'}</p>
+                <p>{settings.allowlist?.emails.join(', ') || 'None'}</p>
               </div>
               <div>
                 <p className="text-[var(--muted)]">User ids</p>
-                <p className="break-all">{settings.allowlist.userIds.join(', ') || 'None'}</p>
+                <p className="break-all">{settings.allowlist?.userIds.join(', ') || 'None'}</p>
               </div>
               <div>
                 <p className="text-[var(--muted)]">Organization</p>
-                <p>{settings.allowlist.orgId ? `${settings.allowlist.orgId} · ${settings.allowlist.orgRole}` : 'Not used'}</p>
+                <p>{settings.allowlist?.orgId ? `${settings.allowlist.orgId} · ${settings.allowlist.orgRole}` : 'Not used'}</p>
               </div>
             </div>
-          </Card>
+          </Card> : null}
         </div>
       ) : null}
     </div>

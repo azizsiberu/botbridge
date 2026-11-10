@@ -55,8 +55,10 @@ describe('admin api', () => {
   it('rejects missing and non-allowlisted sessions', async () => {
     const missing = await fetch(`${app.baseUrl}/api/admin/overview`);
     expect(missing.status).toBe(401);
-    const forbidden = await call(app, '/api/admin/overview', 'stranger');
-    expect(forbidden.status).toBe(403);
+    const stranger = await call(app, '/api/admin/overview', 'stranger');
+    expect(stranger.status).toBe(200);
+    const adminOnly = await call(app, '/api/admin/admin/users', 'stranger');
+    expect(adminOnly.status).toBe(403);
   });
 
   it('creates a bot, rotates the token, and serves the directory', async () => {
@@ -129,9 +131,7 @@ describe('admin api', () => {
     const audit = await json<{ entries: Array<{ action: string }> }>(app, '/api/admin/audit?action=message.sent');
     expect(audit.entries.some((entry) => entry.action === 'message.sent')).toBe(true);
 
-    const bots = await json<{ bots: Array<{ id: string; name: string }> }>(app, '/api/admin/bots');
-    const bobRow = bots.bots.find((bot) => bot.name === 'bob');
-    const saved = await call(app, `/api/admin/bots/${bobRow?.id}/webhook`, 'admin', {
+    const saved = await call(app, `/api/admin/bots/${bob.id}/webhook`, 'admin', {
       method: 'PUT',
       body: JSON.stringify({ url: hookUrl, profile: 'generic' }),
     });
@@ -139,7 +139,7 @@ describe('admin api', () => {
     expect(savedBody.generated).toBe(true);
     expect(savedBody.secret?.startsWith('bbs_')).toBe(true);
 
-    const ping = await json<{ delivery: { state: string; last_status: number } }>(app, `/api/admin/bots/${bobRow?.id}/webhook/test`, {
+    const ping = await json<{ delivery: { state: string; last_status: number } }>(app, `/api/admin/bots/${bob.id}/webhook/test`, {
       method: 'POST',
     });
     expect(ping.delivery.state).toBe('delivered');
@@ -153,15 +153,10 @@ describe('admin api', () => {
     expect(stats.bots.active).toBeGreaterThanOrEqual(2);
     expect(stats.messages.series.length).toBe(14);
 
-    const settings = await json<{ version: string; allowlist: { emails: string[] } }>(app, '/api/admin/settings');
+    const settings = await json<{ version: string; isAdmin: boolean }>(app, '/api/admin/settings');
     expect(settings.version).toBe('0.2.0');
-    expect(settings.allowlist.emails).toEqual(['admin@example.com']);
-
-    const linked = await json<{ clerk_user_id: string }>(app, `/api/admin/bots/${bob?.id}/clerk`, {
-      method: 'PUT',
-      body: JSON.stringify({ clerk_email: 'ada@example.com' }),
-    });
-    expect(linked.clerk_user_id).toBe('user_ada');
+    expect(settings.isAdmin).toBe(true);
+    void bob;
   });
 });
 

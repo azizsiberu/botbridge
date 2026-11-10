@@ -20,12 +20,13 @@ async function main(): Promise<void> {
   );
   try {
     await running.pool.query('TRUNCATE bots RESTART IDENTITY CASCADE');
-    const ada = await addBot(running.pool, { name: 'ada', description: 'Drafts the morning note', capabilities: 'writing,research' });
-    const lin = await addBot(running.pool, { name: 'lin', description: 'Checks the note before it goes out', capabilities: 'review' });
-    const desk = await addBot(running.pool, { name: 'newsroom', description: 'Publishes the finished brief', capabilities: 'publish' });
-    const archive = await addBot(running.pool, { name: 'archive', description: 'Keeps the old copies', capabilities: 'storage' });
+    const me = await fetch(`http://127.0.0.1:${running.port}/api/admin/me`, { headers: { authorization: 'Bearer dev-admin' } });
+    const account = ((await me.json()) as { account: { id: string } }).account;
+    const ada = await addBot(running.pool, { name: 'ada', description: 'Drafts the morning note', capabilities: 'writing,research', ownerUserId: account.id });
+    const lin = await addBot(running.pool, { name: 'lin', description: 'Checks the note before it goes out', capabilities: 'review', ownerUserId: account.id });
+    const desk = await addBot(running.pool, { name: 'newsroom', description: 'Publishes the finished brief', capabilities: 'publish', ownerUserId: account.id });
+    const archive = await addBot(running.pool, { name: 'archive', description: 'Keeps the old copies', capabilities: 'storage', ownerUserId: account.id });
     await running.pool.query(`UPDATE bots SET revoked_at = now() - interval '2 days' WHERE id = $1`, [archive.bot.id]);
-    await running.pool.query(`UPDATE bots SET clerk_email = 'ada@example.com', clerk_user_id = 'user_ada' WHERE id = $1`, [ada.bot.id]);
     await running.pool.query(
       `UPDATE bots SET webhook_url = 'https://lin.example/hooks/botbridge', webhook_profile = 'openbot', webhook_secret_enc = 'v1.placeholder' WHERE id = $1`,
       [lin.bot.id],
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
         [id, thread, from, to, body, days],
       );
     }
-    for (let day = 1; day <= 12; day += 1) {
+    for (let day = 1; day <= 4; day += 1) {
       await running.pool.query(
         `INSERT INTO messages (id, thread_id, from_bot_id, to_bot_id, kind, body, created_at, read_at)
          VALUES ($1, $2, $3, $4, 'broadcast', $5, now() - make_interval(days => $6), now())`,
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
     const base = `http://127.0.0.1:${running.port}`;
     const pages: Array<[string, string, number, number]> = [
       ['/', 'overview.png', 1440, 1100],
+      ['/connections', 'connections.png', 1440, 1000],
       ['/bots', 'bots.png', 1440, 1100],
       [`/bots/${ada.bot.id}`, 'bot.png', 1440, 1400],
       ['/mail', 'mail.png', 1440, 1100],

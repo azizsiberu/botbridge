@@ -4,6 +4,7 @@ import { encryptSecret, generateToken, generateWebhookSecret, hashToken, tokenPr
 import { UserError, isUniqueViolation } from './errors.js';
 import { LIMITS } from './limits.js';
 import { renderDoorbellBody, type DoorbellNotice } from './doorbell.js';
+import { UNASSIGNED_USER_ID, assertCanReach, reachableBots } from './tenancy.js';
 import {
   assertWebhookUrl,
   isUuid,
@@ -31,6 +32,8 @@ export interface Actor {
   capabilities: string[];
   webhookConfigured: boolean;
   webhookProfile: WebhookProfile | null;
+  ownerUserId: string;
+  ownerName: string;
 }
 
 interface BotRecord extends PublicBot {
@@ -40,9 +43,10 @@ interface BotRecord extends PublicBot {
   revoked_at: Date | null;
   token_prefix: string;
   created_at: Date;
-  clerk_user_id: string | null;
-  clerk_email: string | null;
   updated_at: Date;
+  owner_user_id: string;
+  owner_name: string;
+  owner_status: 'active' | 'suspended';
 }
 
 interface Queryable {
@@ -63,6 +67,8 @@ function toActor(row: BotRecord): Actor {
     ...publicBot(row),
     webhookConfigured: row.webhook_url !== null,
     webhookProfile: row.webhook_profile,
+    ownerUserId: row.owner_user_id,
+    ownerName: row.owner_name,
   };
 }
 
@@ -111,18 +117,19 @@ async function enqueueDoorbell(
   );
 }
 
-const BOT_COLUMNS = `id, name, description, capabilities, webhook_url, webhook_secret_enc, webhook_profile, revoked_at, token_prefix, created_at, clerk_user_id, clerk_email, updated_at`;
+const BOT_SELECT = `b.id, b.name, b.description, b.capabilities, b.webhook_url, b.webhook_secret_enc, b.webhook_profile, b.revoked_at, b.token_prefix, b.created_at, b.updated_at, b.owner_user_id, u.display_name AS owner_name, u.status AS owner_status`;
+const BOT_FROM = `FROM bots b JOIN users u ON u.id = b.owner_user_id`;
 
 async function findActive(db: Queryable, to: string): Promise<BotRecord | null> {
   if (isUuid(to)) {
     const byId = await db.query<BotRecord>(
-      `SELECT ${BOT_COLUMNS} FROM bots WHERE id = $1 AND revoked_at IS NULL`,
+      `SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.id = $1 AND b.revoked_at IS NULL`,
       [to],
     );
     if (byId.rows[0]) return byId.rows[0];
   }
   const byName = await db.query<BotRecord>(
-    `SELECT ${BOT_COLUMNS} FROM bots WHERE name = $1 AND revoked_at IS NULL`,
+    `SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.name = $1 AND b.revoked_at IS NULL`,
     [to.trim().toLowerCase()],
   );
   return byName.rows[0] ?? null;
@@ -131,28 +138,36 @@ async function findActive(db: Queryable, to: string): Promise<BotRecord | null> 
 export async function authenticateBot(pool: Pool, token: string): Promise<Actor | null> {
   if (!token.startsWith('bb_') || token.length < 20) return null;
   const result = await pool.query<BotRecord>(
-    `SELECT ${BOT_COLUMNS} FROM bots WHERE token_hash = $1`,
+    `SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.token_hash = $1`,
     [hashToken(token)],
   );
   const row = result.rows[0];
-  if (!row || row.revoked_at) return null;
+  if (!row || row.revoked_at || row.owner_status === 'suspended') return null;
+  return toActor(row);
+}
+
+export async function actorById(pool: Pool, id: string): Promise<Actor | null> {
+  const result = await pool.query<BotRecord>(`SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.id = $1`, [id]);
+  const row = result.rows[0];
+  if (!row || row.revoked_at || row.owner_status === 'suspended') return null;
   return toActor(row);
 }
 
 export async function addBot(
   pool: Pool,
-  input: { name: string; description?: string; capabilities?: string[] | string },
+  input: { name: string; description?: string; capabilities?: string[] | string; ownerUserId?: string },
 ): Promise<{ bot: PublicBot; token: string }> {
   const name = normalizeName(input.name);
   const description = normalizeDescription(input.description ?? '');
   const capabilities = normalizeCapabilities(input.capabilities ?? []);
   const token = generateToken();
   const id = randomUUID();
+  const ownerUserId = input.ownerUserId ?? UNASSIGNED_USER_ID;
   try {
     await pool.query(
-      `INSERT INTO bots (id, name, description, capabilities, token_hash, token_prefix)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, name, description, capabilities, hashToken(token), tokenPrefix(token)],
+      `INSERT INTO bots (id, name, description, capabilities, token_hash, token_prefix, owner_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, name, description, capabilities, hashToken(token), tokenPrefix(token), ownerUserId],
     );
   } catch (error) {
     if (isUniqueViolation(error)) throw new UserError(`A bot named "${name}" already exists.`);
@@ -182,7 +197,7 @@ export async function listBotsAdmin(pool: Pool): Promise<
   }>
 > {
   const result = await pool.query<BotRecord>(
-    `SELECT ${BOT_COLUMNS} FROM bots ORDER BY revoked_at NULLS FIRST, name`,
+    `SELECT ${BOT_SELECT} ${BOT_FROM} ORDER BY b.revoked_at NULLS FIRST, b.name`,
   );
   return result.rows.map((row) => ({
     id: row.id,
@@ -277,7 +292,7 @@ export async function clearWebhook(pool: Pool, name: string): Promise<void> {
 }
 
 export async function getBotById(pool: Pool, id: string): Promise<BotRecord | null> {
-  const result = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE id = $1`, [requireUuid(id, 'bot id')]);
+  const result = await pool.query<BotRecord>(`SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.id = $1`, [requireUuid(id, 'bot id')]);
   return result.rows[0] ?? null;
 }
 
@@ -349,127 +364,6 @@ export async function updateBotById(
   return { id: current.id, name, description, capabilities };
 }
 
-export async function setClerkLink(
-  pool: Pool,
-  id: string,
-  link: { userId: string | null; email: string | null },
-): Promise<void> {
-  const bot = await getBotById(pool, id);
-  if (!bot) throw new UserError('Bot not found.');
-  const userId = link.userId?.trim() || null;
-  const email = link.email?.trim().toLowerCase() || null;
-  if (userId && !/^user_[A-Za-z0-9]+$/.test(userId)) {
-    throw new UserError('Clerk user id should look like user_abc123.');
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new UserError('Clerk email is not a valid email address.');
-  }
-  try {
-    await pool.query(`UPDATE bots SET clerk_user_id = $2, clerk_email = $3, updated_at = now() WHERE id = $1`, [
-      bot.id,
-      userId,
-      email,
-    ]);
-  } catch (error) {
-    if (isUniqueViolation(error)) throw new UserError('That Clerk user is already linked to another bot.');
-    throw error;
-  }
-  await writeAudit(pool, {
-    actorId: bot.id,
-    action: 'bot.clerk_linked',
-    resourceType: 'bot',
-    resourceId: bot.id,
-    detail: { linked: Boolean(userId || email) },
-  });
-}
-
-export async function resolveOAuthBot(
-  pool: Pool,
-  profile: { userId: string; email: string | null },
-): Promise<Actor> {
-  const byUser = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE clerk_user_id = $1`, [profile.userId]);
-  const linked = byUser.rows[0];
-  if (linked) {
-    if (linked.revoked_at) throw new UserError('The bot linked to this Clerk account is revoked.');
-    return toActor(linked);
-  }
-
-  if (profile.email) {
-    const byEmail = await pool.query<BotRecord>(
-      `SELECT ${BOT_COLUMNS} FROM bots
-       WHERE clerk_user_id IS NULL AND lower(clerk_email) = lower($1)
-       ORDER BY created_at
-       LIMIT 1`,
-      [profile.email],
-    );
-    const emailMatch = byEmail.rows[0];
-    if (emailMatch) {
-      if (emailMatch.revoked_at) throw new UserError('The bot reserved for this email is revoked.');
-      try {
-        await pool.query(`UPDATE bots SET clerk_user_id = $2, updated_at = now() WHERE id = $1 AND clerk_user_id IS NULL`, [
-          emailMatch.id,
-          profile.userId,
-        ]);
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error;
-      }
-      return toActor(emailMatch);
-    }
-  }
-
-  return provisionOAuthBot(pool, profile);
-}
-
-async function provisionOAuthBot(pool: Pool, profile: { userId: string; email: string | null }): Promise<Actor> {
-  const base = nameFromIdentity(profile.email, profile.userId);
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const name = attempt === 0 ? base : `${base.slice(0, 58)}-${attempt + 1}`;
-    const id = randomUUID();
-    const token = generateToken();
-    try {
-      await pool.query(
-        `INSERT INTO bots (id, name, description, capabilities, token_hash, token_prefix, clerk_user_id, clerk_email)
-         VALUES ($1, $2, $3, '{}', $4, $5, $6, $7)`,
-        [
-          id,
-          name,
-          profile.email ? `Signed in as ${profile.email}` : 'Signed in with Clerk',
-          hashToken(token),
-          tokenPrefix(token),
-          profile.userId,
-          profile.email,
-        ],
-      );
-    } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
-      const existing = await pool.query<BotRecord>(`SELECT ${BOT_COLUMNS} FROM bots WHERE clerk_user_id = $1`, [
-        profile.userId,
-      ]);
-      if (existing.rows[0] && !existing.rows[0].revoked_at) return toActor(existing.rows[0]);
-      continue;
-    }
-    await writeAudit(pool, {
-      actorId: id,
-      action: 'bot.created',
-      resourceType: 'bot',
-      resourceId: id,
-      detail: { name, via: 'oauth' },
-    });
-    const created = await getBotById(pool, id);
-    if (!created) throw new Error('provisioned bot disappeared');
-    return toActor(created);
-  }
-  throw new UserError('Could not provision a bot for this Clerk account.');
-}
-
-function nameFromIdentity(email: string | null, userId: string): string {
-  const local = (email?.split('@')[0] ?? 'clerk').toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
-  const trimmed = local.slice(0, 40);
-  if (trimmed.length > 0 && /^[a-z0-9]/.test(trimmed)) return trimmed;
-  const suffix = userId.replace(/[^a-z0-9]/gi, '').slice(-6).toLowerCase() || 'bot';
-  return `clerk-${suffix}`;
-}
-
 export async function enqueueTestPing(pool: Pool, botId: string): Promise<string> {
   const bot = await getBotById(pool, botId);
   if (!bot || bot.revoked_at) throw new UserError('Bot not found.');
@@ -503,12 +397,8 @@ export async function enqueueTestPing(pool: Pool, botId: string): Promise<string
   return id;
 }
 
-export async function directory(pool: Pool): Promise<PublicBot[]> {
-  const result = await pool.query<PublicBot>(
-    `SELECT id, name, description, capabilities
-     FROM bots WHERE revoked_at IS NULL ORDER BY name`,
-  );
-  return result.rows;
+export async function directory(pool: Pool, actor: Actor) {
+  return reachableBots(pool, actor);
 }
 
 async function withTx<T>(pool: Pool, fn: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -541,6 +431,7 @@ export async function sendMessage(
   const text = requireText(input.text, LIMITS.messageChars, 'Message');
   const recipient = await findActive(pool, input.to);
   if (!recipient) throw new UserError(`No active bot matches "${input.to}".`);
+  await assertCanReach(pool, actor, recipient);
   const threadId = input.threadId ? requireUuid(input.threadId, 'thread_id') : randomUUID();
   const id = randomUUID();
   const createdAt = await withTx(pool, async (client) => {
@@ -582,17 +473,19 @@ export async function broadcast(
   text: string,
 ): Promise<{ thread_id: string; recipients: PublicBot[]; messages: Array<{ id: string; to: string }> }> {
   const body = requireText(text, LIMITS.broadcastChars, 'Broadcast');
-  const others = await pool.query<BotRecord>(
-    `SELECT ${BOT_COLUMNS} FROM bots WHERE revoked_at IS NULL AND id <> $1 ORDER BY name`,
-    [actor.id],
-  );
-  if (others.rows.length > LIMITS.broadcastRecipients) {
+  const reachable = (await reachableBots(pool, actor)).filter((bot) => bot.relation !== 'self');
+  const others: BotRecord[] = [];
+  for (const item of reachable) {
+    const row = await findActive(pool, item.id);
+    if (row) others.push(row);
+  }
+  if (others.length > LIMITS.broadcastRecipients) {
     throw new UserError(`Broadcast is limited to ${LIMITS.broadcastRecipients} other bots.`);
   }
   const threadId = randomUUID();
   const messages: Array<{ id: string; to: string }> = [];
   await withTx(pool, async (client) => {
-    for (const recipient of others.rows) {
+    for (const recipient of others) {
       const id = randomUUID();
       await client.query(
         `INSERT INTO messages (id, thread_id, from_bot_id, to_bot_id, kind, body)
@@ -618,7 +511,7 @@ export async function broadcast(
   });
   return {
     thread_id: threadId,
-    recipients: others.rows.map(publicBot),
+    recipients: others.map(publicBot),
     messages,
   };
 }
@@ -755,6 +648,7 @@ export async function postTask(
   const instructions = requireText(input.instructions, LIMITS.taskChars, 'Instructions');
   const recipient = await findActive(pool, input.to);
   if (!recipient) throw new UserError(`No active bot matches "${input.to}".`);
+  await assertCanReach(pool, actor, recipient);
   const id = randomUUID();
   await withTx(pool, async (client) => {
     await client.query(
@@ -850,7 +744,7 @@ export async function completeTask(pool: Pool, actor: Actor, id: string, resultT
       detail: { chars: result.length, preview: preview(result, 120) },
     });
     const author = await client.query<BotRecord>(
-      `SELECT ${BOT_COLUMNS} FROM bots WHERE id = $1 AND revoked_at IS NULL`,
+      `SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.id = $1 AND b.revoked_at IS NULL`,
       [row.from_bot_id],
     );
     const authorRow = author.rows[0];

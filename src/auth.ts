@@ -8,9 +8,10 @@ import { UserError } from './errors.js';
 import type { OAuthVerifier } from './identity.js';
 import type { Pool } from './db.js';
 import { TOKEN_LIFETIME_SECONDS } from './limits.js';
-import { authenticateBot, resolveOAuthBot, type Actor } from './store.js';
+import { accountIdForClerk } from './tenancy.js';
+import { actorById, authenticateBot, type Actor } from './store.js';
 
-export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null): OAuthTokenVerifier {
+export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null, selectionUrl?: string | null): OAuthTokenVerifier {
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
       if (token.startsWith('bb_')) {
@@ -22,7 +23,25 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
       const profile = await oauth.verifyAccessToken(token);
       if (!profile) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Clerk rejected this access token');
       try {
-        const actor = await resolveOAuthBot(pool, { userId: profile.userId, email: profile.email });
+        const accountId = await accountIdForClerk(pool, profile.userId, profile.email);
+        if (!accountId) {
+          throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
+        }
+        const clientId = profile.clientId || 'default';
+        const grant = await pool.query<{ bot_id: string }>(
+          `SELECT bot_id FROM oauth_grants
+           WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
+          [accountId, clientId],
+        );
+        const botId = grant.rows[0]?.bot_id;
+        if (!botId) {
+          const choose = selectionUrl ? `${selectionUrl}?client_id=${encodeURIComponent(clientId)}` : '/oauth/choose';
+          throw new UserError(`Choose which bot this connection uses: ${choose}`);
+        }
+        const actor = await actorById(pool, botId);
+        if (!actor || actor.ownerUserId !== accountId) {
+          throw new UserError('The bot bound to this connection is no longer available.');
+        }
         return {
           ...botAuth(token, actor, 'oauth', profile.expiresAt, profile.scopes.length > 0 ? profile.scopes : ['profile', 'email']),
           extra: {
@@ -58,6 +77,8 @@ function botExtra(actor: Actor): Record<string, unknown> {
     capabilities: actor.capabilities,
     webhookConfigured: actor.webhookConfigured,
     webhookProfile: actor.webhookProfile,
+    ownerUserId: actor.ownerUserId,
+    ownerName: actor.ownerName,
   };
 }
 
@@ -77,5 +98,7 @@ export function actorFromAuth(authInfo: AuthInfo | undefined): Actor {
     capabilities,
     webhookConfigured: extra.webhookConfigured === true,
     webhookProfile: profile === 'generic' || profile === 'openbot' || profile === 'grok' ? profile : null,
+    ownerUserId: typeof extra.ownerUserId === 'string' ? extra.ownerUserId : '',
+    ownerName: typeof extra.ownerName === 'string' ? extra.ownerName : '',
   };
 }

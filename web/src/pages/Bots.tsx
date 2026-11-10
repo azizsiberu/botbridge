@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, type Bot, type Guide } from '../api';
 import { PageTitle } from '../Shell';
-import { Button, Card, CopyButton, Empty, ErrorNote, Field, Pill, control } from '../ui';
+import { Button, Card, CopyButton, Empty, ErrorNote, Field, Loading, Pill, control } from '../ui';
 
 export function BotsPage() {
   const [query, setQuery] = useState('');
@@ -26,13 +26,14 @@ export function BotsPage() {
   return (
     <div>
       <PageTitle
-        kicker="Directory"
+        kicker="Your counter"
         title="Bots"
+        lede="Each bot has its own token. Bots on this account can talk to each other. Other accounts need a connection you both accept."
         action={<Button onClick={() => setOpen(true)}>New bot</Button>}
       />
       <input
         className={control}
-        placeholder="Search name, description, or Clerk email"
+        placeholder="Search name or description"
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -40,8 +41,9 @@ export function BotsPage() {
         }}
       />
       {error ? <div className="mt-4"><ErrorNote message={error} /></div> : null}
+      {!bots && !error ? <Loading label="Opening your directory…" /> : null}
       <div className="mt-4 grid gap-3">
-        {bots?.length === 0 ? <Empty title="No bots yet" body="Create one and the token is shown once. Hand it to the bot, or link a Clerk user so ChatGPT can sign in as that bot." /> : null}
+        {bots?.length === 0 ? <Onboarding onCreate={() => setOpen(true)} /> : null}
         {bots?.map((bot) => (
           <Link key={bot.id} to={`/bots/${bot.id}`} className="block">
             <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:border-[var(--accent)]">
@@ -130,6 +132,32 @@ export function TokenOnce({ issued, onClose }: { issued: { name: string; token: 
         </Button>
       </div>
     </Modal>
+  );
+}
+
+function Onboarding({ onCreate }: { onCreate: () => void }) {
+  const steps = [
+    ['01', 'Name the bot', 'A short name other bots can address. You can change the description later.'],
+    ['02', 'Copy the token', 'It is shown once, like a claim check. Rotate it if you lose it.'],
+    ['03', 'Connect a client', 'Paste the snippet into Claude Code, Cursor, Grok Bot, or OpenBot. ChatGPT uses OAuth and then you pick this bot.'],
+  ];
+  return (
+    <div className="grid gap-4">
+      <Empty
+        title="Open your first window"
+        body="A new account starts empty. Create a bot, keep the token, and the rest of the desk fills in."
+        action={<Button onClick={onCreate}>Create your first bot</Button>}
+      />
+      <div className="grid gap-3 md:grid-cols-3">
+        {steps.map(([n, title, body]) => (
+          <Card key={n} className="p-5">
+            <p className="serif text-3xl text-[var(--muted)]">{n}</p>
+            <p className="mt-2 font-semibold">{title}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">{body}</p>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -12,6 +12,9 @@ import { OverviewPage } from './pages/Overview';
 import { SettingsPage } from './pages/Settings';
 import { TasksPage } from './pages/Tasks';
 import { ThreadPage } from './pages/Thread';
+import { ConnectionsPage } from './pages/Connections';
+import { ChoosePage } from './pages/Choose';
+import { AdminPage } from './pages/Admin';
 
 export function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
@@ -75,6 +78,9 @@ function Desk({ version }: { version: string }) {
         <Route path="/" element={<OverviewPage />} />
         <Route path="/bots" element={<BotsPage />} />
         <Route path="/bots/:id" element={<BotPage />} />
+        <Route path="/connections" element={<ConnectionsPage />} />
+        <Route path="/oauth/choose" element={<ChoosePage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/mail" element={<MailPage />} />
         <Route path="/mail/:threadId" element={<ThreadPage />} />
         <Route path="/tasks" element={<TasksPage />} />

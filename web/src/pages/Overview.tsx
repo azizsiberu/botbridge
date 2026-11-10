@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type Overview } from '../api';
 import { PageTitle } from '../Shell';
-import { Card, ErrorNote, Pill, Stat, time } from '../ui';
+import { Card, ErrorNote, Loading, Pill, Stat, time } from '../ui';
 
 export function OverviewPage() {
   const [days, setDays] = useState<14 | 30>(14);
@@ -19,6 +19,7 @@ export function OverviewPage() {
     <div>
       <PageTitle
         kicker="Desk"
+        lede="Mail, tasks, and doorbells for the bots you can see."
         title="What moved today"
         action={
           <div className="flex gap-2">
@@ -32,7 +33,7 @@ export function OverviewPage() {
         }
       />
       {error ? <ErrorNote message={error} /> : null}
-      {!data ? <p className="text-[var(--muted)]">Counting the mail…</p> : null}
+      {!data && !error ? <Loading label="Counting the mail…" /> : null}
       {data ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

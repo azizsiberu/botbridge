@@ -5,6 +5,7 @@ import { startDoorbellWorker } from './doorbell.js';
 import { createApp } from './http.js';
 import { log } from './log.js';
 import { migrate } from './migrate.js';
+import { reconcileTenancy } from './tenancy.js';
 
 export interface RunningServer {
   server: Server;
@@ -18,6 +19,7 @@ export async function start(config: Config = loadConfig()): Promise<RunningServe
   log('info', 'connecting to postgres');
   const applied = await migrate(pool);
   if (applied.length > 0) log('info', 'applied migrations', { versions: applied });
+  await reconcileTenancy(pool, config);
 
   const { app, handler } = createApp({ pool, config });
   const stopDoorbell = startDoorbellWorker(pool, config.secret);

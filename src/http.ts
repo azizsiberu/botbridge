@@ -88,7 +88,8 @@ export function createApp(deps: AppDeps) {
   const resourceMetadataUrl = config.publicUrl && config.clerkPublishableKey
     ? `${config.publicUrl}/.well-known/oauth-protected-resource/mcp`
     : undefined;
-  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth), resourceMetadataUrl });
+  const selectionUrl = config.publicUrl ? `${config.publicUrl}/oauth/choose` : null;
+  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth, selectionUrl), resourceMetadataUrl });
 
   app.all('/mcp', auth, async (req: Request, res: Response) => {
     try {

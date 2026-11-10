@@ -59,9 +59,35 @@ export interface Bot {
   revoked_at: string | null;
   created_at: string;
   updated_at: string;
-  clerk_user_id: string | null;
-  clerk_email: string | null;
+  owner?: { id: string; display_name: string };
   status: 'active' | 'revoked';
+}
+
+export interface Account {
+  id: string;
+  email: string | null;
+  displayName: string;
+  isAdmin: boolean;
+  status: string;
+}
+
+export interface Connection {
+  id: string;
+  kind: 'account' | 'bot';
+  status: string;
+  direction: 'incoming' | 'outgoing';
+  from: { name: string; bot: string | null };
+  to: { name: string; bot: string | null };
+  created_at: string;
+}
+
+export interface Grant {
+  id: string;
+  client_id: string;
+  label: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  bot: { id: string; name: string };
 }
 
 export interface Overview {
@@ -135,5 +161,7 @@ export interface Settings {
   allowedHosts: string[];
   rateLimitPerMinute: number;
   limits: Record<string, number>;
-  allowlist: { emails: string[]; userIds: string[]; orgId: string | null; orgRole: string | null };
+  isAdmin?: boolean;
+  signupMode?: 'open' | 'invite';
+  allowlist?: { emails: string[]; userIds: string[]; orgId: string | null; orgRole: string | null };
 }

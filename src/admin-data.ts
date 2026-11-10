@@ -23,37 +23,75 @@ function fillDays(rows: DayCount[], days: number): DayCount[] {
   return out;
 }
 
-async function series(pool: Pool, table: 'messages' | 'tasks', days: number): Promise<DayCount[]> {
+async function messageSeries(pool: Pool, days: number, ownerUserId: string | null): Promise<DayCount[]> {
   const result = await pool.query<{ day: string; count: number }>(
-    `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day, count(*)::int AS count
-     FROM ${table}
-     WHERE created_at >= now() - make_interval(days => $1)
+    `SELECT to_char(date_trunc('day', m.created_at), 'YYYY-MM-DD') AS day, count(*)::int AS count
+     FROM messages m
+     JOIN bots sender ON sender.id = m.from_bot_id
+     JOIN bots recipient ON recipient.id = m.to_bot_id
+     WHERE m.created_at >= now() - make_interval(days => $1)
+       AND ($2::uuid IS NULL OR sender.owner_user_id = $2 OR recipient.owner_user_id = $2)
      GROUP BY 1
      ORDER BY 1`,
-    [days],
+    [days, ownerUserId],
   );
   return fillDays(result.rows, days);
 }
 
-export async function overview(pool: Pool, days: number) {
-  const [bots, messages, unread, tasks, doorbell, recent, messageSeries, taskSeries] = await Promise.all([
+async function taskSeries(pool: Pool, days: number, ownerUserId: string | null): Promise<DayCount[]> {
+  const result = await pool.query<{ day: string; count: number }>(
+    `SELECT to_char(date_trunc('day', t.created_at), 'YYYY-MM-DD') AS day, count(*)::int AS count
+     FROM tasks t
+     JOIN bots author ON author.id = t.from_bot_id
+     JOIN bots assignee ON assignee.id = t.to_bot_id
+     WHERE t.created_at >= now() - make_interval(days => $1)
+       AND ($2::uuid IS NULL OR author.owner_user_id = $2 OR assignee.owner_user_id = $2)
+     GROUP BY 1
+     ORDER BY 1`,
+    [days, ownerUserId],
+  );
+  return fillDays(result.rows, days);
+}
+
+export async function overview(pool: Pool, days: number, ownerUserId: string | null) {
+  const [bots, messages, unread, tasks, doorbell, recent, mailSeries, workSeries] = await Promise.all([
     pool.query<{ active: number; revoked: number }>(
       `SELECT count(*) FILTER (WHERE revoked_at IS NULL)::int AS active,
               count(*) FILTER (WHERE revoked_at IS NOT NULL)::int AS revoked
-       FROM bots`,
+       FROM bots
+       WHERE ($1::uuid IS NULL OR owner_user_id = $1)`,
+      [ownerUserId],
     ),
-    pool.query<{ total: number }>(`SELECT count(*)::int AS total FROM messages`),
-    pool.query<{ unread: number }>(`SELECT count(*)::int AS unread FROM messages WHERE read_at IS NULL`),
+    pool.query<{ total: number }>(
+      `SELECT count(*)::int AS total FROM messages m
+       JOIN bots sender ON sender.id = m.from_bot_id
+       JOIN bots recipient ON recipient.id = m.to_bot_id
+       WHERE ($1::uuid IS NULL OR sender.owner_user_id = $1 OR recipient.owner_user_id = $1)`,
+      [ownerUserId],
+    ),
+    pool.query<{ unread: number }>(
+      `SELECT count(*)::int AS unread FROM messages m
+       JOIN bots recipient ON recipient.id = m.to_bot_id
+       WHERE m.read_at IS NULL AND ($1::uuid IS NULL OR recipient.owner_user_id = $1)`,
+      [ownerUserId],
+    ),
     pool.query<{ open: number; completed: number }>(
-      `SELECT count(*) FILTER (WHERE status = 'open')::int AS open,
-              count(*) FILTER (WHERE status = 'completed')::int AS completed
-       FROM tasks`,
+      `SELECT count(*) FILTER (WHERE t.status = 'open')::int AS open,
+              count(*) FILTER (WHERE t.status = 'completed')::int AS completed
+       FROM tasks t
+       JOIN bots author ON author.id = t.from_bot_id
+       JOIN bots assignee ON assignee.id = t.to_bot_id
+       WHERE ($1::uuid IS NULL OR author.owner_user_id = $1 OR assignee.owner_user_id = $1)`,
+      [ownerUserId],
     ),
     pool.query<{ delivered: number; pending: number; failed: number }>(
-      `SELECT count(*) FILTER (WHERE delivered_at IS NOT NULL)::int AS delivered,
-              count(*) FILTER (WHERE delivered_at IS NULL AND attempts < max_attempts)::int AS pending,
-              count(*) FILTER (WHERE delivered_at IS NULL AND attempts >= max_attempts)::int AS failed
-       FROM doorbell_jobs`,
+      `SELECT count(*) FILTER (WHERE j.delivered_at IS NOT NULL)::int AS delivered,
+              count(*) FILTER (WHERE j.delivered_at IS NULL AND j.attempts < j.max_attempts)::int AS pending,
+              count(*) FILTER (WHERE j.delivered_at IS NULL AND j.attempts >= j.max_attempts)::int AS failed
+       FROM doorbell_jobs j
+       JOIN bots b ON b.id = j.bot_id
+       WHERE ($1::uuid IS NULL OR b.owner_user_id = $1)`,
+      [ownerUserId],
     ),
     pool.query(
       `SELECT a.id::text, a.created_at, a.action, a.resource_type, a.resource_id, a.detail,
@@ -61,35 +99,39 @@ export async function overview(pool: Pool, days: number) {
        FROM audit_log a
        LEFT JOIN bots actor ON actor.id = a.actor_bot_id
        LEFT JOIN bots target ON target.id = a.target_bot_id
+       WHERE ($1::uuid IS NULL OR actor.owner_user_id = $1 OR target.owner_user_id = $1)
        ORDER BY a.id DESC
        LIMIT 12`,
+      [ownerUserId],
     ),
-    series(pool, 'messages', days),
-    series(pool, 'tasks', days),
+    messageSeries(pool, days, ownerUserId),
+    taskSeries(pool, days, ownerUserId),
   ]);
 
   return {
     bots: bots.rows[0] ?? { active: 0, revoked: 0 },
-    messages: { total: messages.rows[0]?.total ?? 0, unread: unread.rows[0]?.unread ?? 0, series: messageSeries },
+    messages: { total: messages.rows[0]?.total ?? 0, unread: unread.rows[0]?.unread ?? 0, series: mailSeries },
     tasks: {
       open: tasks.rows[0]?.open ?? 0,
       completed: tasks.rows[0]?.completed ?? 0,
-      series: taskSeries,
+      series: workSeries,
     },
     doorbell: doorbell.rows[0] ?? { delivered: 0, pending: 0, failed: 0 },
     recent: recent.rows.map(serializeAudit),
   };
 }
 
-export async function listAdminBots(pool: Pool, query: string) {
+export async function listAdminBots(pool: Pool, query: string, ownerUserId: string | null) {
   const result = await pool.query(
-    `SELECT id, name, description, capabilities, token_prefix, webhook_url, webhook_profile,
-            revoked_at, created_at, updated_at, clerk_user_id, clerk_email
-     FROM bots
-     WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%'
-            OR coalesce(clerk_email, '') ILIKE '%' || $1 || '%')
-     ORDER BY revoked_at NULLS FIRST, name`,
-    [query],
+    `SELECT b.id, b.name, b.description, b.capabilities, b.token_prefix, b.webhook_url, b.webhook_profile,
+            b.revoked_at, b.created_at, b.updated_at, u.display_name AS owner_name, u.id AS owner_id
+     FROM bots b
+     JOIN users u ON u.id = b.owner_user_id
+     WHERE ($2::uuid IS NULL OR b.owner_user_id = $2)
+       AND ($1 = '' OR b.name ILIKE '%' || $1 || '%' OR b.description ILIKE '%' || $1 || '%'
+            OR u.display_name ILIKE '%' || $1 || '%')
+     ORDER BY b.revoked_at NULLS FIRST, b.name`,
+    [query, ownerUserId],
   );
   return result.rows.map(serializeBot);
 }
@@ -106,6 +148,7 @@ export async function listAdminMessages(
     q?: string;
     limit: number;
     offset: number;
+    ownerUserId: string | null;
   },
 ) {
   const where = `
@@ -116,6 +159,7 @@ export async function listAdminMessages(
       AND ($5::timestamptz IS NULL OR m.created_at >= $5)
       AND ($6::timestamptz IS NULL OR m.created_at < $6)
       AND ($7 = '' OR m.body ILIKE '%' || $7 || '%')
+      AND ($8::uuid IS NULL OR sender.owner_user_id = $8 OR recipient.owner_user_id = $8)
   `;
   const params = [
     filter.from ?? '',
@@ -125,6 +169,7 @@ export async function listAdminMessages(
     filter.after ?? null,
     filter.before ?? null,
     filter.q ?? '',
+    filter.ownerUserId,
   ];
   const [rows, total] = await Promise.all([
     pool.query(
@@ -136,7 +181,7 @@ export async function listAdminMessages(
        JOIN bots recipient ON recipient.id = m.to_bot_id
        ${where}
        ORDER BY m.created_at DESC
-       LIMIT $8 OFFSET $9`,
+       LIMIT $9 OFFSET $10`,
       [...params, filter.limit, filter.offset],
     ),
     pool.query<{ total: number }>(
@@ -163,7 +208,7 @@ export async function listAdminMessages(
   };
 }
 
-export async function threadMessages(pool: Pool, threadId: string) {
+export async function threadMessages(pool: Pool, threadId: string, ownerUserId: string | null) {
   const result = await pool.query(
     `SELECT m.id, m.thread_id, m.kind, m.body, m.created_at, m.read_at,
             sender.id AS from_id, sender.name AS from_name,
@@ -172,8 +217,9 @@ export async function threadMessages(pool: Pool, threadId: string) {
      JOIN bots sender ON sender.id = m.from_bot_id
      JOIN bots recipient ON recipient.id = m.to_bot_id
      WHERE m.thread_id = $1
+       AND ($2::uuid IS NULL OR sender.owner_user_id = $2 OR recipient.owner_user_id = $2)
      ORDER BY m.created_at ASC`,
-    [threadId],
+    [threadId, ownerUserId],
   );
   return result.rows.map((row) => ({
     id: row.id,
@@ -187,7 +233,7 @@ export async function threadMessages(pool: Pool, threadId: string) {
   }));
 }
 
-export async function listAdminTasks(pool: Pool, status: string | null, query: string) {
+export async function listAdminTasks(pool: Pool, status: string | null, query: string, ownerUserId: string | null) {
   const result = await pool.query(
     `SELECT t.id, t.instructions, t.status, t.result, t.created_at, t.completed_at,
             author.id AS from_id, author.name AS from_name,
@@ -198,9 +244,10 @@ export async function listAdminTasks(pool: Pool, status: string | null, query: s
      WHERE ($1::text IS NULL OR t.status = $1)
        AND ($2 = '' OR t.instructions ILIKE '%' || $2 || '%' OR coalesce(t.result, '') ILIKE '%' || $2 || '%'
             OR author.name ILIKE '%' || $2 || '%' OR assignee.name ILIKE '%' || $2 || '%')
+       AND ($3::uuid IS NULL OR author.owner_user_id = $3 OR assignee.owner_user_id = $3)
      ORDER BY t.created_at DESC
      LIMIT 300`,
-    [status, query],
+    [status, query, ownerUserId],
   );
   return result.rows.map((row) => ({
     id: row.id,
@@ -216,14 +263,15 @@ export async function listAdminTasks(pool: Pool, status: string | null, query: s
 
 export async function listAudit(
   pool: Pool,
-  filter: { action?: string; actor?: string; after?: string; before?: string; limit: number; offset: number },
+  filter: { action?: string; actor?: string; after?: string; before?: string; limit: number; offset: number; ownerUserId: string | null },
 ) {
-  const params = [filter.action ?? '', filter.actor ?? '', filter.after ?? null, filter.before ?? null];
+  const params = [filter.action ?? '', filter.actor ?? '', filter.after ?? null, filter.before ?? null, filter.ownerUserId];
   const where = `
     WHERE ($1 = '' OR a.action = $1)
       AND ($2 = '' OR actor.name ILIKE '%' || $2 || '%' OR target.name ILIKE '%' || $2 || '%')
       AND ($3::timestamptz IS NULL OR a.created_at >= $3)
       AND ($4::timestamptz IS NULL OR a.created_at < $4)
+      AND ($5::uuid IS NULL OR actor.owner_user_id = $5 OR target.owner_user_id = $5)
   `;
   const [rows, total] = await Promise.all([
     pool.query(
@@ -234,7 +282,7 @@ export async function listAudit(
        LEFT JOIN bots target ON target.id = a.target_bot_id
        ${where}
        ORDER BY a.id DESC
-       LIMIT $5 OFFSET $6`,
+       LIMIT $6 OFFSET $7`,
       [...params, filter.limit, filter.offset],
     ),
     pool.query<{ total: number }>(
@@ -251,9 +299,9 @@ export async function listAudit(
 
 export async function listDoorbell(
   pool: Pool,
-  filter: { bot?: string; state?: string; limit: number; offset: number },
+  filter: { bot?: string; state?: string; limit: number; offset: number; ownerUserId: string | null },
 ) {
-  const params = [filter.bot ?? '', filter.state ?? ''];
+  const params = [filter.bot ?? '', filter.state ?? '', filter.ownerUserId];
   const where = `
     WHERE ($1 = '' OR b.name ILIKE '%' || $1 || '%' OR b.id::text = $1)
       AND (
@@ -262,6 +310,7 @@ export async function listDoorbell(
         OR ($2 = 'pending' AND j.delivered_at IS NULL AND j.attempts < j.max_attempts)
         OR ($2 = 'failed' AND j.delivered_at IS NULL AND j.attempts >= j.max_attempts)
       )
+      AND ($3::uuid IS NULL OR b.owner_user_id = $3)
   `;
   const [rows, total] = await Promise.all([
     pool.query(
@@ -271,7 +320,7 @@ export async function listDoorbell(
        JOIN bots b ON b.id = j.bot_id
        ${where}
        ORDER BY j.created_at DESC
-       LIMIT $3 OFFSET $4`,
+       LIMIT $4 OFFSET $5`,
       [...params, filter.limit, filter.offset],
     ),
     pool.query<{ total: number }>(
@@ -346,8 +395,8 @@ function serializeBot(row: {
   revoked_at: Date | null;
   created_at: Date;
   updated_at: Date;
-  clerk_user_id: string | null;
-  clerk_email: string | null;
+  owner_name: string;
+  owner_id: string;
 }) {
   return {
     id: row.id,
@@ -359,8 +408,7 @@ function serializeBot(row: {
     revoked_at: isoOrNull(row.revoked_at),
     created_at: iso(row.created_at),
     updated_at: iso(row.updated_at),
-    clerk_user_id: row.clerk_user_id,
-    clerk_email: row.clerk_email,
+    owner: { id: row.owner_id, display_name: row.owner_name },
     status: row.revoked_at ? 'revoked' : 'active',
   };
 }

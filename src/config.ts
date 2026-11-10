@@ -18,6 +18,9 @@ export interface Config {
   adminOrgRole: string | null;
   /** Local screenshot and dev login. Refused when NODE_ENV is production. */
   dashboardDevAuth: boolean;
+  /** Email that should own bots created before accounts existed. */
+  legacyOwnerEmail: string | null;
+  signupMode: 'open' | 'invite';
 }
 
 const PLACEHOLDER_SECRETS = new Set([
@@ -98,6 +101,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     adminOrgId: env.BOTBRIDGE_ADMIN_ORG_ID?.trim() || null,
     adminOrgRole: env.BOTBRIDGE_ADMIN_ORG_ROLE?.trim() || null,
     dashboardDevAuth,
+    legacyOwnerEmail: env.BOTBRIDGE_LEGACY_OWNER_EMAIL?.trim().toLowerCase() || null,
+    signupMode: env.BOTBRIDGE_SIGNUP_MODE === 'invite' ? 'invite' : 'open',
   };
 }
 

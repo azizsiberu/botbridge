@@ -1,17 +1,4 @@
 import { Router, type Request, type Response } from 'express';
-import { connectGuide } from './connect-guide.js';
-import type { Config } from './config.js';
-import type { Pool } from './db.js';
-import { processDueJobs } from './doorbell.js';
-import { UserError } from './errors.js';
-import { log } from './log.js';
-import {
-  allowlistConfigured,
-  isAllowlisted,
-  type AdminAuth,
-  type AdminIdentity,
-  type ClerkDirectory,
-} from './identity.js';
 import {
   doorbellJob,
   listAdminBots,
@@ -23,7 +10,15 @@ import {
   settingsPayload,
   threadMessages,
 } from './admin-data.js';
+import { connectGuide } from './connect-guide.js';
+import type { Config } from './config.js';
+import type { Pool } from './db.js';
+import { processDueJobs } from './doorbell.js';
+import { UserError } from './errors.js';
+import { isAllowlisted, type AdminAuth, type ClerkDirectory } from './identity.js';
+import { log } from './log.js';
 import {
+  actorById,
   addBot,
   clearWebhook,
   enqueueTestPing,
@@ -31,10 +26,23 @@ import {
   reactivateBot,
   revokeBot,
   rotateBotToken,
-  setClerkLink,
   setWebhook,
   updateBotById,
 } from './store.js';
+import {
+  bindOAuthGrant,
+  createInvite,
+  decideConnection,
+  getSignupMode,
+  listConnections,
+  reachableBots,
+  revokeConnection,
+  revokeOAuthGrant,
+  setSignupMode,
+  suspendUser,
+  syncAccount,
+  type Account,
+} from './tenancy.js';
 import { isUuid } from './text.js';
 
 interface Deps {
@@ -47,32 +55,52 @@ interface Deps {
 export function adminRouter(deps: Deps): Router {
   const router = Router();
   router.use((req, res, next) => {
-    void guard(deps, req, res).then((identity) => {
-      if (!identity) return;
-      res.locals.admin = identity;
-      next();
-    }).catch(next);
+    void guard(deps, req, res)
+      .then((account) => {
+        if (!account) return;
+        res.locals.account = account;
+        next();
+      })
+      .catch(next);
+  });
+
+  router.get('/me', async (_req, res) => {
+    const account = current(res);
+    res.json({
+      account: publicAccount(account),
+      signupMode: await getSignupMode(deps.pool),
+    });
   });
 
   router.get('/overview', async (req, res) => {
     const days = req.query.days === '30' ? 30 : 14;
-    res.json(await overview(deps.pool, days));
+    res.json(await overview(deps.pool, days, scope(current(res))));
   });
 
-  router.get('/settings', (_req, res) => {
-    res.json(settingsPayload(deps.config));
+  router.get('/settings', async (_req, res) => {
+    const account = current(res);
+    res.json({
+      ...settingsPayload(deps.config),
+      signupMode: await getSignupMode(deps.pool),
+      isAdmin: account.isAdmin,
+      allowlist: account.isAdmin ? settingsPayload(deps.config).allowlist : undefined,
+    });
   });
 
   router.get('/bots', async (req, res) => {
-    res.json({ bots: await listAdminBots(deps.pool, text(req.query.q)) });
+    const account = current(res);
+    const owner = req.query.all === '1' && account.isAdmin ? null : account.id;
+    res.json({ bots: await listAdminBots(deps.pool, text(req.query.q), owner) });
   });
 
   router.post('/bots', async (req, res) => {
+    const account = current(res);
     const body = objectBody(req);
     const created = await addBot(deps.pool, {
       name: stringField(body, 'name'),
       description: optionalString(body, 'description') ?? '',
       capabilities: optionalString(body, 'capabilities') ?? '',
+      ownerUserId: account.id,
     });
     res.status(201).json({
       bot: created.bot,
@@ -82,13 +110,19 @@ export function adminRouter(deps: Deps): Router {
   });
 
   router.get('/bots/:id', async (req, res) => {
-    const bot = await requireBot(deps.pool, req.params.id);
-    const bots = await listAdminBots(deps.pool, '');
-    const found = bots.find((item) => item.id === bot.id);
-    res.json({ bot: found });
+    const bot = await requireOwned(deps.pool, req.params.id, current(res));
+    const bots = await listAdminBots(deps.pool, '', current(res).isAdmin ? null : current(res).id);
+    res.json({ bot: bots.find((item) => item.id === bot.id) });
+  });
+
+  router.get('/bots/:id/reach', async (req, res) => {
+    const bot = await requireOwned(deps.pool, req.params.id, current(res));
+    const actor = await actorById(deps.pool, bot.id);
+    res.json({ bots: actor ? await reachableBots(deps.pool, actor) : [] });
   });
 
   router.patch('/bots/:id', async (req, res) => {
+    await requireOwned(deps.pool, req.params.id, current(res));
     const body = objectBody(req);
     const bot = await updateBotById(deps.pool, req.params.id, {
       name: optionalString(body, 'name'),
@@ -99,17 +133,19 @@ export function adminRouter(deps: Deps): Router {
   });
 
   router.post('/bots/:id/revoke', async (req, res) => {
-    const bot = await requireBot(deps.pool, req.params.id);
+    const bot = await requireOwned(deps.pool, req.params.id, current(res));
     await revokeBot(deps.pool, bot.name);
     res.json({ ok: true });
   });
 
   router.post('/bots/:id/reactivate', async (req, res) => {
+    await requireOwned(deps.pool, req.params.id, current(res));
     await reactivateBot(deps.pool, req.params.id);
     res.json({ ok: true });
   });
 
   router.post('/bots/:id/rotate-token', async (req, res) => {
+    await requireOwned(deps.pool, req.params.id, current(res));
     const rotated = await rotateBotToken(deps.pool, req.params.id);
     res.json({
       token: rotated.token,
@@ -118,7 +154,7 @@ export function adminRouter(deps: Deps): Router {
   });
 
   router.put('/bots/:id/webhook', async (req, res) => {
-    const bot = await requireBot(deps.pool, req.params.id);
+    const bot = await requireOwned(deps.pool, req.params.id, current(res));
     const body = objectBody(req);
     const saved = await setWebhook(deps.pool, deps.config.secret, {
       name: bot.name,
@@ -126,50 +162,81 @@ export function adminRouter(deps: Deps): Router {
       profile: stringField(body, 'profile'),
       secret: optionalString(body, 'secret'),
     });
-    res.json({
-      ok: true,
-      generated: saved.generated,
-      secret: saved.generated ? saved.secret : undefined,
-    });
+    res.json({ ok: true, generated: saved.generated, secret: saved.generated ? saved.secret : undefined });
   });
 
   router.delete('/bots/:id/webhook', async (req, res) => {
-    const bot = await requireBot(deps.pool, req.params.id);
+    const bot = await requireOwned(deps.pool, req.params.id, current(res));
     await clearWebhook(deps.pool, bot.name);
     res.json({ ok: true });
   });
 
   router.post('/bots/:id/webhook/test', async (req, res) => {
+    await requireOwned(deps.pool, req.params.id, current(res));
     const id = await enqueueTestPing(deps.pool, req.params.id);
     await processDueJobs(deps.pool, deps.config.secret);
-    const job = await doorbellJob(deps.pool, id);
-    res.json({ delivery: job });
-  });
-
-  router.put('/bots/:id/clerk', async (req, res) => {
-    const body = objectBody(req);
-    const clear = body.clear === true;
-    if (clear) {
-      await setClerkLink(deps.pool, req.params.id, { userId: null, email: null });
-      res.json({ ok: true });
-      return;
-    }
-    const userId = optionalString(body, 'clerk_user_id');
-    const email = optionalString(body, 'clerk_email');
-    if (!userId && !email) throw new UserError('Provide a Clerk user id or email, or clear the link.');
-    let resolved = { userId: userId ?? null, email: email ?? null };
-    if (deps.directory) {
-      const found = await deps.directory.lookup({ userId, email });
-      if (!found) throw new UserError('Clerk has no user with that id or email.');
-      resolved = { userId: found.userId, email: found.email ?? email ?? null };
-    }
-    await setClerkLink(deps.pool, req.params.id, resolved);
-    res.json({ ok: true, clerk_user_id: resolved.userId, clerk_email: resolved.email });
+    res.json({ delivery: await doorbellJob(deps.pool, id) });
   });
 
   router.get('/bots/:id/connect', async (req, res) => {
-    await requireBot(deps.pool, req.params.id);
+    await requireOwned(deps.pool, req.params.id, current(res));
     res.json(connectGuide(deps.config.publicUrl, Boolean(deps.config.clerkPublishableKey)));
+  });
+
+  router.get('/connections', async (_req, res) => {
+    res.json({ connections: await listConnections(deps.pool, current(res).id) });
+  });
+
+  router.post('/connections/:id/approve', async (req, res) => {
+    await decideConnection(deps.pool, current(res).id, req.params.id, 'active');
+    res.json({ ok: true });
+  });
+
+  router.post('/connections/:id/decline', async (req, res) => {
+    await decideConnection(deps.pool, current(res).id, req.params.id, 'declined');
+    res.json({ ok: true });
+  });
+
+  router.post('/connections/:id/revoke', async (req, res) => {
+    await revokeConnection(deps.pool, current(res).id, req.params.id);
+    res.json({ ok: true });
+  });
+
+  router.get('/grants', async (_req, res) => {
+    const account = current(res);
+    const result = await deps.pool.query(
+      `SELECT g.id, g.clerk_client_id, g.label, g.created_at, g.revoked_at, b.id AS bot_id, b.name AS bot_name
+       FROM oauth_grants g JOIN bots b ON b.id = g.bot_id
+       WHERE g.user_id = $1
+       ORDER BY g.created_at DESC`,
+      [account.id],
+    );
+    res.json({
+      grants: result.rows.map((row) => ({
+        id: row.id,
+        client_id: row.clerk_client_id,
+        label: row.label,
+        created_at: row.created_at,
+        revoked_at: row.revoked_at,
+        bot: { id: row.bot_id, name: row.bot_name },
+      })),
+    });
+  });
+
+  router.post('/grants', async (req, res) => {
+    const body = objectBody(req);
+    const created = await bindOAuthGrant(deps.pool, current(res).id, {
+      botId: stringField(body, 'bot_id'),
+      clientId: stringField(body, 'client_id'),
+      label: optionalString(body, 'label'),
+    });
+    res.status(201).json(created);
+  });
+
+  router.post('/grants/:id/revoke', async (req, res) => {
+    const account = current(res);
+    await revokeOAuthGrant(deps.pool, account.id, req.params.id, account.isAdmin);
+    res.json({ ok: true });
   });
 
   router.get('/messages', async (req, res) => {
@@ -184,15 +251,16 @@ export function adminRouter(deps: Deps): Router {
         after: optionalQuery(req, 'after'),
         before: optionalQuery(req, 'before'),
         q: text(req.query.q),
-        limit: limit(req, 50, 200),
-        offset: offset(req),
+        limit: limitOf(req, 50, 200),
+        offset: offsetOf(req),
+        ownerUserId: scope(current(res)),
       }),
     );
   });
 
   router.get('/threads/:id', async (req, res) => {
     if (!isUuid(req.params.id)) throw new UserError('thread must be a UUID.');
-    const messages = await threadMessages(deps.pool, req.params.id);
+    const messages = await threadMessages(deps.pool, req.params.id, scope(current(res)));
     if (messages.length === 0) {
       res.status(404).json({ error: 'not_found' });
       return;
@@ -203,7 +271,7 @@ export function adminRouter(deps: Deps): Router {
   router.get('/tasks', async (req, res) => {
     const status = optionalQuery(req, 'status');
     if (status && status !== 'open' && status !== 'completed') throw new UserError('status must be open or completed.');
-    res.json({ tasks: await listAdminTasks(deps.pool, status ?? null, text(req.query.q)) });
+    res.json({ tasks: await listAdminTasks(deps.pool, status ?? null, text(req.query.q), scope(current(res))) });
   });
 
   router.get('/audit', async (req, res) => {
@@ -213,8 +281,9 @@ export function adminRouter(deps: Deps): Router {
         actor: text(req.query.actor),
         after: optionalQuery(req, 'after'),
         before: optionalQuery(req, 'before'),
-        limit: limit(req, 50, 200),
-        offset: offset(req),
+        limit: limitOf(req, 50, 200),
+        offset: offsetOf(req),
+        ownerUserId: scope(current(res)),
       }),
     );
   });
@@ -228,10 +297,48 @@ export function adminRouter(deps: Deps): Router {
       await listDoorbell(deps.pool, {
         bot: text(req.query.bot),
         state,
-        limit: limit(req, 50, 200),
-        offset: offset(req),
+        limit: limitOf(req, 50, 200),
+        offset: offsetOf(req),
+        ownerUserId: scope(current(res)),
       }),
     );
+  });
+
+  router.get('/admin/users', async (_req, res) => {
+    assertAdmin(current(res));
+    const result = await deps.pool.query(
+      `SELECT u.id, u.email, u.display_name, u.status, u.clerk_user_id, u.created_at,
+              count(b.id)::int AS bots
+       FROM users u
+       LEFT JOIN bots b ON b.owner_user_id = u.id
+       GROUP BY u.id
+       ORDER BY u.created_at`,
+    );
+    res.json({ users: result.rows });
+  });
+
+  router.post('/admin/users/:id/suspend', async (req, res) => {
+    assertAdmin(current(res));
+    const body = objectBody(req);
+    await suspendUser(deps.pool, req.params.id, body.suspended !== false);
+    res.json({ ok: true });
+  });
+
+  router.post('/admin/invites', async (req, res) => {
+    const account = current(res);
+    assertAdmin(account);
+    const body = objectBody(req);
+    await createInvite(deps.pool, stringField(body, 'email'), account.id);
+    res.status(201).json({ ok: true });
+  });
+
+  router.post('/admin/signup', async (req, res) => {
+    assertAdmin(current(res));
+    const body = objectBody(req);
+    const mode = stringField(body, 'mode');
+    if (mode !== 'open' && mode !== 'invite') throw new UserError('mode must be open or invite.');
+    await setSignupMode(deps.pool, mode);
+    res.json({ signupMode: mode });
   });
 
   router.use((error: unknown, _req: Request, res: Response, next: (error?: unknown) => void) => {
@@ -240,7 +347,8 @@ export function adminRouter(deps: Deps): Router {
       return;
     }
     if (error instanceof UserError) {
-      res.status(400).json({ error: 'invalid', message: error.message });
+      const status = error.message === 'Instance admins only.' ? 403 : 400;
+      res.status(status).json({ error: status === 403 ? 'forbidden' : 'invalid', message: error.message });
       return;
     }
     log('error', 'admin route failed', { error: error instanceof Error ? error.message : 'unknown' });
@@ -250,7 +358,19 @@ export function adminRouter(deps: Deps): Router {
   return router;
 }
 
-async function guard(deps: Deps, req: Request, res: Response): Promise<AdminIdentity | null> {
+function current(res: Response): Account {
+  return res.locals.account as Account;
+}
+
+function scope(account: Account): string | null {
+  return account.isAdmin ? null : account.id;
+}
+
+function assertAdmin(account: Account): void {
+  if (!account.isAdmin) throw new UserError('Instance admins only.');
+}
+
+async function guard(deps: Deps, req: Request, res: Response): Promise<Account | null> {
   const header = req.header('authorization') ?? '';
   const token = /^bearer\s+/i.test(header) ? header.replace(/^bearer\s+/i, '').trim() : '';
   if (!token) {
@@ -262,20 +382,22 @@ async function guard(deps: Deps, req: Request, res: Response): Promise<AdminIden
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
-  if (!allowlistConfigured(deps.config) || !isAllowlisted(deps.config, identity)) {
-    res.status(403).json({
-      error: 'forbidden',
-      message: 'This account is not on the botbridge admin allowlist.',
-    });
+  const isAdmin = isAllowlisted(deps.config, identity);
+  try {
+    return await syncAccount(deps.pool, deps.config, identity, isAdmin);
+  } catch (error) {
+    const message = error instanceof UserError ? error.message : 'Could not open this account.';
+    const status = message.includes('suspended') || message.includes('invite') ? 403 : 400;
+    res.status(status).json({ error: status === 403 ? 'forbidden' : 'invalid', message });
     return null;
   }
-  return identity;
 }
 
-async function requireBot(pool: Pool, id: string) {
+async function requireOwned(pool: Pool, id: string | undefined, account: Account) {
   if (!isUuid(id ?? '')) throw new UserError('Bot id must be a UUID.');
-  const bot = await getBotById(pool, id);
+  const bot = await getBotById(pool, id ?? '');
   if (!bot) throw new UserError('Bot not found.');
+  if (!account.isAdmin && bot.owner_user_id !== account.id) throw new UserError('Bot not found.');
   return bot;
 }
 
@@ -308,7 +430,7 @@ function optionalQuery(req: Request, key: string): string | undefined {
   return value || undefined;
 }
 
-function limit(req: Request, fallback: number, max: number): number {
+function limitOf(req: Request, fallback: number, max: number): number {
   const raw = text(req.query.limit);
   if (!raw) return fallback;
   const parsed = Number(raw);
@@ -318,10 +440,20 @@ function limit(req: Request, fallback: number, max: number): number {
   return parsed;
 }
 
-function offset(req: Request): number {
+function offsetOf(req: Request): number {
   const raw = text(req.query.offset);
   if (!raw) return 0;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 5000) throw new UserError('offset must be an integer from 0 to 5000.');
   return parsed;
+}
+
+function publicAccount(account: Account) {
+  return {
+    id: account.id,
+    email: account.email,
+    displayName: account.displayName,
+    isAdmin: account.isAdmin,
+    status: account.status,
+  };
 }

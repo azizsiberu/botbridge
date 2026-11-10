@@ -20,9 +20,8 @@ export function BotPage() {
   const [url, setUrl] = useState('');
   const [profile, setProfile] = useState<(typeof profiles)[number]>('generic');
   const [secret, setSecret] = useState('');
-  const [clerkEmail, setClerkEmail] = useState('');
-  const [clerkId, setClerkId] = useState('');
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [reach, setReach] = useState<Array<{ name: string; relation: string; owner: { display_name: string } }>>([]);
 
   function load() {
     api<{ bot: Bot }>(`/api/admin/bots/${id}`)
@@ -33,27 +32,17 @@ export function BotPage() {
         setCapabilities(body.bot.capabilities.join(', '));
         setUrl(body.bot.webhook?.url ?? '');
         setProfile((body.bot.webhook?.profile as (typeof profiles)[number]) ?? 'generic');
-        setClerkEmail(body.bot.clerk_email ?? '');
-        setClerkId(body.bot.clerk_user_id ?? '');
+        setReach([]);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
     api<Guide>(`/api/admin/bots/${id}/connect`).then(setGuide).catch(() => undefined);
+    api<{ bots: Array<{ name: string; relation: string; owner: { display_name: string } }> }>(`/api/admin/bots/${id}/reach`)
+      .then((body) => setReach(body.bots))
+      .catch(() => undefined);
   }
 
   useEffect(() => {
-    api<{ bot: Bot }>(`/api/admin/bots/${id}`)
-      .then((body) => {
-        setBot(body.bot);
-        setName(body.bot.name);
-        setDescription(body.bot.description);
-        setCapabilities(body.bot.capabilities.join(', '));
-        setUrl(body.bot.webhook?.url ?? '');
-        setProfile((body.bot.webhook?.profile as (typeof profiles)[number]) ?? 'generic');
-        setClerkEmail(body.bot.clerk_email ?? '');
-        setClerkId(body.bot.clerk_user_id ?? '');
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-    api<Guide>(`/api/admin/bots/${id}/connect`).then(setGuide).catch(() => undefined);
+    load();
   }, [id]);
 
   if (!bot) return error ? <ErrorNote message={error} /> : <p className="text-[var(--muted)]">Loading bot…</p>;
@@ -162,26 +151,16 @@ export function BotPage() {
           </form>
         </Card>
         <Card className="p-5">
-          <h2 className="serif text-2xl">Clerk identity</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">When this person signs in through ChatGPT or Claude OAuth, they connect as this bot. Leave both blank and the first sign-in creates a new bot instead.</p>
-          <form
-            className="mt-4 grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              api(`/api/admin/bots/${bot.id}/clerk`, { method: 'PUT', body: JSON.stringify({ clerk_user_id: clerkId, clerk_email: clerkEmail }) })
-                .then(load)
-                .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-            }}
-          >
-            <Field label="Clerk user id"><input className={control} value={clerkId} onChange={(event) => setClerkId(event.target.value)} placeholder="user_…" /></Field>
-            <Field label="Email"><input className={control} value={clerkEmail} onChange={(event) => setClerkEmail(event.target.value)} placeholder="ada@example.com" /></Field>
-            <div className="flex gap-2">
-              <Button type="submit">Link</Button>
-              <Button tone="ghost" onClick={() => api(`/api/admin/bots/${bot.id}/clerk`, { method: 'PUT', body: JSON.stringify({ clear: true }) }).then(load).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'))}>
-                Unlink
-              </Button>
-            </div>
-          </form>
+          <h2 className="serif text-2xl">Who this bot can reach</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">Same-account bots are open. Other names appear only after a connection is approved.</p>
+          <ul className="mt-4 grid gap-2">
+            {reach.map((item) => (
+              <li key={item.name} className="flex items-center justify-between text-sm">
+                <span>{item.name}</span>
+                <span className="text-[var(--muted)]">{item.relation.replace('_', ' ')} · {item.owner.display_name}</span>
+              </li>
+            ))}
+          </ul>
         </Card>
         <Card className="p-5">
           <h2 className="serif text-2xl">Connect</h2>
