@@ -1,6 +1,7 @@
 import { createClerkClient, type ClerkClient } from '@clerk/backend';
 import { verifyClerkToken } from '@clerk/mcp-tools/server';
 import type { Config } from './config.js';
+import { errorFields } from './errors.js';
 import { log } from './log.js';
 
 export interface AdminIdentity {
@@ -76,7 +77,7 @@ export function createAdminAuth(config: Config): AdminAuth {
         const orgRoles = config.adminOrgId ? await orgMemberships(client, userId) : [];
         return { userId, email, orgRoles };
       } catch (error) {
-        log('error', 'admin session rejected', { error: error instanceof Error ? error.message : 'unknown' });
+        log('error', 'admin session rejected', { error: errorFields(error) });
         return null;
       }
     },
@@ -109,7 +110,7 @@ export function createOAuthVerifier(config: Config): OAuthVerifier | null {
           clientId: info?.clientId || userId,
         };
       } catch (error) {
-        log('error', 'oauth token rejected', { error: error instanceof Error ? error.message : 'unknown' });
+        log('error', 'oauth token rejected', { error: errorFields(error) });
         return null;
       }
     },

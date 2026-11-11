@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, type Account } from './api';
+import { watchAdminAccount } from './admin-session';
+import type { Account } from './api';
 import { ThemeButton } from './theme';
 
 const links = [
@@ -27,13 +28,29 @@ function Nav({ items, onNavigate }: { items: ReadonlyArray<readonly [string, str
   );
 }
 
-export function Shell({ children, version }: { children: ReactNode; version: string }) {
+function SignOutButton({ onSignOut }: { onSignOut: () => void | Promise<void> }) {
+  const [pending, setPending] = useState(false);
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      disabled={pending}
+      aria-busy={pending}
+      onClick={() => {
+        setPending(true);
+        void Promise.resolve(onSignOut()).catch(() => setPending(false));
+      }}
+    >
+      {pending ? 'Signing out' : 'Sign out'}
+    </button>
+  );
+}
+
+export function Shell({ children, version, onSignOut }: { children: ReactNode; version: string; onSignOut?: () => void | Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
 
-  useEffect(() => {
-    api<{ account: Account }>('/api/admin/me').then((body) => setAccount(body.account)).catch(() => undefined);
-  }, []);
+  useEffect(() => watchAdminAccount(setAccount), []);
 
   const items = account?.isAdmin ? [...links, ['/admin', 'Admin'] as const] : links;
 
@@ -41,9 +58,12 @@ export function Shell({ children, version }: { children: ReactNode; version: str
     <div>
       <header className="topbar">
         <strong>botbridge</strong>
-        <button type="button" className="theme-toggle" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-          {open ? 'Close' : 'Menu'}
-        </button>
+        <div className="topbar-actions">
+          {onSignOut ? <SignOutButton onSignOut={onSignOut} /> : null}
+          <button type="button" className="theme-toggle" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+            {open ? 'Close' : 'Menu'}
+          </button>
+        </div>
       </header>
       {open ? (
         <div className="mobile-nav">
@@ -63,6 +83,7 @@ export function Shell({ children, version }: { children: ReactNode; version: str
           <Nav items={items} />
           <div className="spine-foot">
             <ThemeButton />
+            {onSignOut ? <SignOutButton onSignOut={onSignOut} /> : null}
           </div>
         </aside>
         <main className="main">

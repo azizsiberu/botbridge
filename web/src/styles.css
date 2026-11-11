@@ -162,6 +162,9 @@
 
 .spine-foot {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 16px;
 }
 
@@ -175,9 +178,20 @@
   font-weight: 600;
 }
 
+.theme-toggle:disabled {
+  opacity: 0.65;
+}
+
 .topbar,
 .mobile-nav {
   display: none;
+}
+
+.topbar-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 .main {
@@ -872,9 +886,13 @@ textarea.control {
     color: var(--spine-ink);
   }
   .topbar strong {
+    min-width: 0;
+    overflow: hidden;
     font-size: 18px;
     font-weight: 600;
     letter-spacing: -0.03em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .topbar .theme-toggle,
   .mobile-nav .theme-toggle {
