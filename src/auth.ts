@@ -21,8 +21,8 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
         if (!actor) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
         return botAuth(token, actor, 'token', Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SECONDS, ['bot']);
       }
-      const ctx = currentConnectContext();
       try {
+        const ctx = currentConnectContext();
         if (token.startsWith('bbk_')) {
           const resolved = await resolveApiKeyConnection(pool, token, ctx);
           return botAuth(
@@ -67,8 +67,23 @@ function currentConnectContext() {
   return connectContext({
     body: req?.body,
     sessionHeader: req?.header('mcp-session-id') ?? null,
-    botHeader: req?.header('x-botbridge-bot') ?? null,
+    botHeader: botFromRequest(req?.header('x-botbridge-bot') ?? null, pathBot(req?.params)),
   });
+}
+
+function pathBot(params: unknown): string | null {
+  if (!params || typeof params !== 'object') return null;
+  const bot = (params as { bot?: unknown }).bot;
+  return typeof bot === 'string' && bot.trim() ? bot : null;
+}
+
+/** The bot named by X-Botbridge-Bot or by /mcp/b/<bot>. Two different names are refused rather than guessed. */
+export function botFromRequest(header: string | null, path: string | null): string | null {
+  const fromHeader = header?.trim() || null;
+  if (fromHeader && path && fromHeader.toLowerCase() !== path.trim().toLowerCase()) {
+    throw new UserError(`X-Botbridge-Bot "${fromHeader}" does not match the bot in the URL "${path}". Use one or the other.`);
+  }
+  return fromHeader ?? path;
 }
 
 function botAuth(

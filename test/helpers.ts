@@ -53,10 +53,10 @@ export async function connectClient(
   url: string,
   token: string,
   name: string,
-  options: { title?: string; headers?: Record<string, string> } = {},
+  options: { title?: string; headers?: Record<string, string>; path?: string } = {},
 ): Promise<Client> {
   const client = new Client({ name, version: '0.1.0', ...(options.title ? { title: options.title } : {}) });
-  const transport = new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
+  const transport = new StreamableHTTPClientTransport(new URL(`${url}${options.path ?? '/mcp'}`), {
     authProvider: { token: async () => token },
     requestInit: options.headers ? { headers: options.headers } : undefined,
   });

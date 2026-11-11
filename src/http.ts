@@ -92,7 +92,9 @@ export function createApp(deps: AppDeps) {
   const selectionUrl = config.publicUrl ? `${config.publicUrl}/oauth/choose` : null;
   const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth, selectionUrl), resourceMetadataUrl });
 
-  app.all('/mcp', (req, res, next) => {
+  // /mcp/b/<bot-name> picks the bot from the URL, like X-Botbridge-Bot, for clients that cannot set headers
+  // or that all look identical (several Grok Bots on one Clerk account). The token audience stays /mcp.
+  app.all(['/mcp', '/mcp/b/:bot'], (req, res, next) => {
     mcpRequestStore.run(req, () => next());
   }, auth, async (req: Request, res: Response) => {
     try {
@@ -167,6 +169,8 @@ function mountOAuthMetadata(app: ReturnType<typeof createMcpExpressApp>, config:
   };
   app.get('/.well-known/oauth-protected-resource', (_req, res) => send(res, document()));
   app.get('/.well-known/oauth-protected-resource/mcp', (_req, res) => send(res, document()));
+  // RFC 9728 path-inserted metadata for /mcp/b/<bot>. The resource stays /mcp, a prefix of the bot URL.
+  app.get('/.well-known/oauth-protected-resource/mcp/b/:bot', (_req, res) => send(res, document()));
   app.get('/.well-known/oauth-authorization-server', async (_req, res) => {
     try {
       const metadata = await fetchClerkAuthorizationServerMetadata({ publishableKey: config.clerkPublishableKey! });
@@ -179,7 +183,7 @@ function mountOAuthMetadata(app: ReturnType<typeof createMcpExpressApp>, config:
   app.options('/.well-known/oauth-protected-resource', (_req, res) => {
     res.set(corsHeaders).status(204).end();
   });
-  app.options('/.well-known/oauth-protected-resource/mcp', (_req, res) => {
+  app.options(['/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-protected-resource/mcp/b/:bot'], (_req, res) => {
     res.set(corsHeaders).status(204).end();
   });
   app.options('/.well-known/oauth-authorization-server', (_req, res) => {
