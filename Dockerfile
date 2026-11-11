@@ -8,7 +8,7 @@ COPY web/ ./
 #   web/src/pages/Choose.tsx   -> ../../../src/oauth-client.ts
 #   web/src/admin-session.ts   -> ../../src/admin-probe.ts
 # Copy those files to /src so `npm run build` works from a clean checkout.
-COPY src/redirect.ts src/oauth-client.ts src/admin-probe.ts /src/
+COPY src/redirect.ts src/oauth-client.ts src/admin-probe.ts src/workspace-types.ts /src/
 RUN npm run build
 
 FROM node:22-alpine AS server

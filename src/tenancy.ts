@@ -1,3 +1,4 @@
+import type { ReachableBot } from './workspace-types.js';
 import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import type { Pool } from './db.js';
@@ -19,14 +20,7 @@ export interface Account {
   isAdmin: boolean;
 }
 
-export interface ReachableBot {
-  id: string;
-  name: string;
-  description: string;
-  capabilities: string[];
-  relation: 'self' | 'same_account' | 'account_link' | 'bot_link';
-  owner: { id: string; display_name: string };
-}
+export type { ReachableBot } from './workspace-types.js';
 
 interface BotRef {
   id: string;

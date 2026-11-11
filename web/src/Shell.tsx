@@ -1,3 +1,4 @@
+import { Avatar, Icon, type IconName } from './social';
 import { NavLink } from 'react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { watchAdminAccount } from './admin-session';
@@ -5,23 +6,16 @@ import type { Account } from './api';
 import { ThemeButton } from './theme';
 
 const links = [
-  ['/', 'Overview'],
-  ['/bots', 'Bots'],
-  ['/keys', 'API keys'],
-  ['/connections', 'Connections'],
-  ['/mail', 'Mail'],
-  ['/tasks', 'Tasks'],
-  ['/audit', 'Audit'],
-  ['/doorbell', 'Doorbell'],
-  ['/settings', 'Settings'],
+  ['/', 'Home'], ['/bots', 'Manage bots'], ['/mail', 'Mail explorer'],
+  ['/tasks', 'Tasks'], ['/doorbell', 'Deliveries'], ['/settings', 'Settings'],
+  ['/overview', 'Overview'], ['/connections', 'Connections'], ['/keys', 'API keys'], ['/audit', 'Audit'],
 ] as const;
-
-function Nav({ items, onNavigate }: { items: ReadonlyArray<readonly [string, string]>; onNavigate?: () => void }) {
+function Nav({ items, onNavigate }: { items: ReadonlyArray<readonly [string, IconName]>; onNavigate?: () => void }) {
   return (
     <nav aria-label="Desk">
       {items.map(([to, label]) => (
         <NavLink key={to} to={to} end={to === '/'} onClick={onNavigate}>
-          {label}
+          <Icon name={label} /><span>{label}</span>
         </NavLink>
       ))}
     </nav>
@@ -57,7 +51,7 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
   return (
     <div>
       <header className="topbar">
-        <strong>botbridge</strong>
+        <strong><Icon name="Brand" /> botbridge</strong>
         <div className="topbar-actions">
           {onSignOut ? <SignOutButton onSignOut={onSignOut} /> : null}
           <button type="button" className="theme-toggle" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
@@ -76,7 +70,7 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
       <div className="shell">
         <aside className="spine">
           <div className="spine-brand">
-            <strong>botbridge</strong>
+            <strong><Icon name="Brand" /> botbridge</strong>
             <span>v{version}</span>
             {account ? <span className="spine-account">{account.displayName}</span> : null}
           </div>
@@ -89,7 +83,19 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
         <main className="main">
           <div className="main-inner">{children}</div>
         </main>
+        <aside className="network-panel" aria-label="Your network">
+          <div className="network-account"><Avatar name={account?.displayName ?? 'botbridge'} /><div><strong>{account?.displayName ?? 'Your workspace'}</strong><p>Botbridge v{version}</p></div></div>
+        </aside>
       </div>
+      <nav className="bottom-nav" aria-label="Mobile navigation">
+        <NavLink to="/" end aria-label="Home"><Icon name="Home" /></NavLink>
+        <NavLink to="/messages" aria-label="Messages"><Icon name="Inbox" /></NavLink>
+        {sessionStorage.getItem('botbridge-active-bot')
+          ? <NavLink to="/?compose=1" aria-label="Compose"><Icon name="Create" /></NavLink>
+          : <button disabled aria-label="Choose an active bot to compose"><Icon name="Create" /></button>}
+        <NavLink to="/activity" aria-label="Activity"><Icon name="Activity" /></NavLink>
+        <NavLink to="/profile" aria-label="Profile"><Icon name="Profile" /></NavLink>
+      </nav>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { BotsPage } from './pages/Bots';
 import { KeysPage } from './pages/Keys';
 import { DoorbellPage } from './pages/Doorbell';
 import { MailPage } from './pages/Mail';
+import { Workspace } from './Workspace';
 import { OverviewPage } from './pages/Overview';
 import { SettingsPage } from './pages/Settings';
 import { TasksPage } from './pages/Tasks';
@@ -47,7 +48,7 @@ export function App() {
 }
 
 function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string | null }) {
-  const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const { isLoaded, isSignedIn, userId, getToken, signOut } = useAuth();
   const location = useLocation();
   const rawRedirect = new URLSearchParams(location.search).get('redirect_url');
   const redirectUrl = allowedRedirectUrl(rawRedirect, { pageOrigin: window.location.origin, publicUrl });
@@ -111,7 +112,7 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
     if (redirectUrl) return <Centered title="botbridge" body="Sending you back to finish connecting." />;
     return <Navigate to="/" replace />;
   }
-  return <Desk version={version} onSignOut={() => signOut({ redirectUrl: `${window.location.origin}/sign-in` })} />;
+  return <Desk key={userId} version={version} onSignOut={() => signOut({ redirectUrl: `${window.location.origin}/sign-in` })} />;
 }
 
 function DevDesk({ version }: { version: string }) {
@@ -120,10 +121,12 @@ function DevDesk({ version }: { version: string }) {
 }
 
 function Desk({ version, onSignOut }: { version: string; onSignOut?: () => void | Promise<void> }) {
+  const location = useLocation();
+  if (/^\/(?:$|(?:messages|rooms|work|search|activity|profile)(?:\/|$))/.test(location.pathname)) return <Workspace signOut={onSignOut} />;
   return (
     <Shell version={version} onSignOut={onSignOut}>
       <Routes>
-        <Route path="/" element={<OverviewPage />} />
+        <Route path="/overview" element={<OverviewPage />} />
         <Route path="/bots" element={<BotsPage />} />
         <Route path="/keys" element={<KeysPage />} />
         <Route path="/bots/:id" element={<BotPage />} />

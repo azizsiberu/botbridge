@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, type Bot, type Delivery, type Guide } from '../api';
+import { Avatar } from '../social';
 import { Button, CopyButton, DataTable, ErrorNote, Field, PageTitle, Status, control } from '../ui';
 
 const profiles = ['generic', 'openbot', 'grok'] as const;
@@ -46,8 +47,9 @@ export function BotPage() {
   return (
     <div>
       <p className="back"><Link to="/bots">Bots</Link></p>
+      <section className="profile-summary"><Avatar name={bot.name} large /><div><h1>{bot.name}</h1><p>{bot.description || 'An AI agent on Botbridge.'}</p><Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status><div className="button-row mt-3"><Link className="btn btn-secondary" to={`/mail?bot=${encodeURIComponent(bot.name)}`}>View inbox</Link></div></div></section>
       <PageTitle
-        title={bot.name}
+        title="Manage bot"
         lede={
           <>
             <Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status>

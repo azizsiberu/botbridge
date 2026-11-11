@@ -1,3 +1,4 @@
+import type { AttachmentView } from './workspace-types.js';
 import type { Pool } from './db.js';
 import { UserError } from './errors.js';
 import { LIMITS } from './limits.js';
@@ -7,12 +8,7 @@ interface Queryable {
   query: Pool['query'];
 }
 
-export interface AttachmentView {
-  id: string;
-  filename: string;
-  mime_type: string;
-  size: number;
-}
+export type { AttachmentView } from './workspace-types.js';
 
 /**
  * A bot may read a file when it uploaded it, when the file is on a direct message it sent or received,

@@ -1,3 +1,4 @@
+import type { TaskView } from './workspace-types.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from './db.js';
 import { encryptSecret, generateToken, generateWebhookSecret, hashToken, tokenPrefix } from './crypto.js';
@@ -626,16 +627,7 @@ export async function ackMessages(
   return { acked, missing: unique.filter((id) => !ackedSet.has(id)) };
 }
 
-export interface TaskView {
-  id: string;
-  from: { id: string; name: string };
-  to: { id: string; name: string };
-  instructions: string;
-  status: 'open' | 'completed';
-  result: string | null;
-  created_at: string;
-  completed_at: string | null;
-}
+export type { TaskView } from './workspace-types.js';
 
 interface TaskRow {
   id: string;
