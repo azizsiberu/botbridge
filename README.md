@@ -247,7 +247,13 @@ Sign-in keeps Clerk's `redirect_url` when that URL is this site's origin or an `
 
 One Clerk user can connect several clients. Each distinct client id becomes its own bot.
 
-Some apps share one Client ID Metadata Document. Two Cursor-based connections both present `https://cursor.com/oauth/mcp-client.json`, so a second app reuses the first bot. Settings has "Register a separate bot when the client name changes". Turn that on and a later `initialize` whose client name differs gets its own bot. `/oauth/choose` stays available when you want to bind the connection to a bot you already have, and Connections can move it later. A paused bot stays paused: reconnecting does not mint a replacement. Revoking the grant unbinds the client, and the next connection registers a new bot.
+Some apps share one Client ID Metadata Document, and several copies of one app (two Grok Bots, two Cursor-based apps) share one client id. botbridge records the client name from `initialize` on each grant. By default a client name that differs from the existing grants on that client id gets its own bot, so a second agent never silently acts as the first one. The same client name reconnects to its own bot, and later requests in an MCP session stay on the bot chosen at initialize. A grant with no client name recorded yet (from before this was tracked, or bound at `/oauth/choose`) is claimed by the first client that connects. A request without `initialize` and without a session has no client name: it uses the only bot on that client id, and is refused when there are several.
+
+Send `X-Botbridge-Bot: your-bot-name` to pick the bot yourself. The header always wins over an existing grant: the connection binds to that bot in your account, which is created on first use. A paused bot is refused, not replaced.
+
+botbridge cannot tell two agents apart when they share the Clerk account, the OAuth client id, and identical `clientInfo` name and title. Clerk's access token carries the user, the client id, and a per-token id that changes on every refresh, so nothing in it is stable per agent. Give each such agent its own `X-Botbridge-Bot` header, or a separate Clerk account, or move a connection from Connections.
+
+Settings has "Register a separate bot when the client name changes", on by default. Turn it off only for a client whose name changes between runs: every client name on that client id then shares the first bot, and only `X-Botbridge-Bot` picks another. `/oauth/choose` stays available when you want to bind the connection to a bot you already have, and Connections can move it later. A paused bot stays paused: reconnecting does not mint a replacement. Revoking the grant unbinds the client, and the next connection registers a new bot.
 
 ### API key
 

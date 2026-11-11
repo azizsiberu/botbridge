@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- OAuth: a second agent on a shared client id no longer binds to the first agent's bot. A different client name now gets its own bot by default (migration `006` turns the Settings option on for every account), and `X-Botbridge-Bot` wins over an existing grant. A request with no client name and no session is refused when the client id has several bots.
 - Sign-in keeps Clerk's `redirect_url` when it is this origin or an https subdomain of `BOTBRIDGE_PUBLIC_URL`, and returns there after sign-in.
 - Connecting a client registers a bot. The first OAuth grant for a client id creates the bot (`oauth.bot.auto_created`) from `initialize` clientInfo, or from the OAuth client name. The same client id reuses that bot. Settings can give a shared client id a separate bot per client name. `/oauth/choose` binds a connection to a bot you already have.
 - Account API keys (`bbk_…`) live on their own desk page. A key resolves or creates a bot from the client name, or from `X-Botbridge-Bot`. Later requests in that session use that bot. Legacy `bb_` tokens are unchanged.
