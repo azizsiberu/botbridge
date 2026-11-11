@@ -192,48 +192,107 @@ async function resolveOAuth(
   const label = clip((info?.title?.trim() || info?.name?.trim() || oauthClientName(clientId)), 200);
 
   const actor = await withLock(pool, `oauth:${accountId}`, clientId, async (db) => {
-    const split = await oauthSplitClients(pool, accountId);
     const grants = await listGrants(db, accountId, clientId);
-    const match = pickGrant(grants, origin, split);
-    if (match) {
-      if (match.bot_revoked) {
-        throw new UserError(`The bot bound to this connection is paused. Reactivate it, or bind it to another bot: ${choose}`);
-      }
-      if (!match.origin_name) {
-        await db.query(`UPDATE oauth_grants SET origin_name = $2 WHERE id = $1 AND origin_name IS NULL`, [match.id, origin]);
-      }
-      const existing = await actorById(pool, match.bot_id);
-      if (!existing || existing.ownerUserId !== accountId) {
-        throw new UserError(`The bot bound to this connection is no longer available. Bind it to another bot: ${choose}`);
-      }
-      return existing;
-    }
+    const register = (): Promise<Actor> =>
+      createAutoBot(db, {
+        ownerUserId: accountId,
+        baseName: origin,
+        description: clip(`Created automatically when ${label} connected with OAuth.`, 500),
+        auditAction: 'oauth.bot.auto_created',
+        auditDetail: { name: origin, client_id: clientId, origin_name: origin, label, pinned: pinned !== null },
+        afterInsert: async (botId) => {
+          await insertGrant(db, { userId: accountId, botId, clientId, label, originName: origin });
+        },
+      });
+
+    // An explicit X-Botbridge-Bot always wins over whatever grant this client id already has.
     if (pinned) {
-      const owned = await botByName(pool, accountId, pinned);
-      if (owned) {
-        await insertGrant(db, { userId: accountId, botId: owned.id, clientId, label, originName: origin });
+      const named = await ownBotByName(db, accountId, pinned);
+      if (named?.revoked) {
+        throw new UserError(`The bot "${pinned}" is paused. Reactivate it, or pick another name with X-Botbridge-Bot.`);
+      }
+      const forPin = grants.find((grant) => grant.origin_name === pinned);
+      if (named) {
+        const owned = await actorById(pool, named.id);
+        if (!owned) throw new UserError(`The bot "${pinned}" is not available. Pick another name with X-Botbridge-Bot.`);
+        if (forPin?.bot_id !== owned.id) {
+          if (forPin) await db.query(`UPDATE oauth_grants SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, [forPin.id]);
+          await insertGrant(db, { userId: accountId, botId: owned.id, clientId, label, originName: pinned });
+          await writeAudit(db, {
+            actorId: owned.id,
+            action: 'oauth.bot.pinned',
+            resourceType: 'bot',
+            resourceId: owned.id,
+            detail: { name: owned.name, client_id: clientId, origin_name: pinned },
+          });
+        }
         return owned;
       }
+      // The pinned name was registered earlier under a suffix (the plain name belongs to another account).
+      if (forPin) return grantActor(pool, accountId, forPin, choose);
+      return register();
     }
-    return createAutoBot(db, {
-      ownerUserId: accountId,
-      baseName: origin,
-      description: clip(`Created automatically when ${label} connected with OAuth.`, 500),
-      auditAction: 'oauth.bot.auto_created',
-      auditDetail: { name: origin, client_id: clientId, origin_name: origin, label },
-      afterInsert: async (botId) => {
-        await insertGrant(db, { userId: accountId, botId, clientId, label, originName: origin });
-      },
-    });
+
+    const split = await oauthSplitClients(pool, accountId);
+    const match = pickGrant(grants, { origin, fromInitialize: info !== null, split });
+    if (match === 'ambiguous') {
+      throw new UserError(
+        'This OAuth client is connected as more than one bot. Send initialize again, or set X-Botbridge-Bot to the bot name.',
+      );
+    }
+    if (match) {
+      if (!match.origin_name && info !== null) {
+        await db.query(`UPDATE oauth_grants SET origin_name = $2 WHERE id = $1 AND origin_name IS NULL`, [match.id, origin]);
+      }
+      return grantActor(pool, accountId, match, choose);
+    }
+    return register();
   });
 
   const sessionId = info ? await openSession(pool, { userId: accountId, botId: actor.id, kind: 'oauth', oauthClientId: clientId }) : null;
   return { actor, sessionId };
 }
 
-function pickGrant(grants: GrantRow[], origin: string, split: boolean): GrantRow | undefined {
-  if (!split) return grants[0];
-  return grants.find((grant) => grant.origin_name === origin) ?? grants.find((grant) => !grant.origin_name);
+async function grantActor(pool: Pool, accountId: string, grant: GrantRow, choose: string): Promise<Actor> {
+  if (grant.bot_revoked) {
+    throw new UserError(`The bot bound to this connection is paused. Reactivate it, or bind it to another bot: ${choose}`);
+  }
+  const existing = await actorById(pool, grant.bot_id);
+  if (!existing || existing.ownerUserId !== accountId) {
+    throw new UserError(`The bot bound to this connection is no longer available. Bind it to another bot: ${choose}`);
+  }
+  return existing;
+}
+
+/**
+ * Pick the grant for this connection, or undefined to register a new bot.
+ *
+ * Default (split): a grant is reused only when its recorded origin (client
+ * name at initialize) matches. A grant with no origin yet (made before origins
+ * were recorded, or bound by hand at /oauth/choose) is claimed by the first
+ * client that connects. Another client name on the same client id gets its own
+ * bot, so one agent never silently acts as another.
+ *
+ * Shared (split off, opt-in): every client name on this client id reuses the
+ * first grant, which was the old default.
+ *
+ * A request that is not initialize carries no client name. It reuses the only
+ * grant, or the grant for the fallback name, and is refused when that would be
+ * a guess between several bots.
+ */
+function pickGrant(
+  grants: GrantRow[],
+  input: { origin: string; fromInitialize: boolean; split: boolean },
+): GrantRow | undefined | 'ambiguous' {
+  const exact = grants.find((grant) => grant.origin_name === input.origin);
+  if (exact) return exact;
+  if (!input.split) return grants[0];
+  if (!input.fromInitialize) {
+    if (grants.length === 0) return undefined;
+    if (grants.length === 1) return grants[0];
+    return 'ambiguous';
+  }
+  return grants.find((grant) => !grant.origin_name);
 }
 
 async function listGrants(db: Query, accountId: string, clientId: string): Promise<GrantRow[]> {
@@ -332,6 +391,15 @@ async function onlyKeyBot(pool: Pool, apiKeyId: string): Promise<Actor | null> {
   const actor = await actorById(pool, id);
   if (!actor) throw new UserError('The bot for this key is paused. Reactivate it, or set X-Botbridge-Bot to another name.');
   return actor;
+}
+
+async function ownBotByName(db: Query, userId: string, name: string): Promise<{ id: string; revoked: boolean } | null> {
+  const result = await db.query<{ id: string; revoked_at: Date | null }>(
+    `SELECT id, revoked_at FROM bots WHERE owner_user_id = $1 AND name = $2`,
+    [userId, name],
+  );
+  const row = result.rows[0];
+  return row ? { id: row.id, revoked: row.revoked_at !== null } : null;
 }
 
 async function botByName(pool: Pool, userId: string, name: string): Promise<Actor | null> {

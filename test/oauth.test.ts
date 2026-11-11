@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectClient, issueBot, listenForTests, resetDb, toolJson, type TestServer } from './helpers.js';
-import { syncAccount } from '../src/tenancy.js';
+import { bindOAuthGrant, syncAccount } from '../src/tenancy.js';
 import { addBot } from '../src/store.js';
 
 const future = Math.floor(Date.now() / 1000) + 3600;
 const cursorClientId = 'https://cursor.com/oauth/mcp-client.json';
+const grokClientId = 'https://grok.example/oauth/mcp-client.json';
 
 describe('oauth registration', () => {
   let app: TestServer;
@@ -26,6 +27,9 @@ describe('oauth registration', () => {
                 scopes: ['profile', 'email'],
                 clientId: cursorClientId,
               };
+            }
+            if (token === 'oauth-grok') {
+              return { userId: 'user_ada', email: 'ada@example.com', expiresAt: future, scopes: ['profile', 'email'], clientId: grokClientId };
             }
             if (token === 'oauth-other') {
               return {
@@ -87,13 +91,13 @@ describe('oauth registration', () => {
     expect((await pending(app, 'ada')).clients).toEqual([]);
 
     const sameClientDifferentName = await connectClient(app.baseUrl, 'oauth-cursor', 'other-app');
-    expect(toolJson(await sameClientDifferentName.callTool({ name: 'whoami', arguments: {} })).name).toBe('cursor-inbox');
+    expect(toolJson(await sameClientDifferentName.callTool({ name: 'whoami', arguments: {} })).name).toBe('other-app');
     await sameClientDifferentName.close();
     const audits = await app.pool.query(`SELECT 1 FROM audit_log WHERE action = 'oauth.bot.auto_created'`);
-    expect(audits.rowCount).toBe(1);
+    expect(audits.rowCount).toBe(2);
   });
 
-  it('registers a separate bot per OAuth client, and per client name when the account opts in', async () => {
+  it('registers a separate bot per OAuth client, and per client name by default', async () => {
     const account = await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
     const chatgpt = await connectClient(app.baseUrl, 'oauth-ada', 'chatgpt');
     expect(toolJson(await chatgpt.callTool({ name: 'whoami', arguments: {} })).name).toBe('chatgpt');
@@ -103,7 +107,6 @@ describe('oauth registration', () => {
     expect(toolJson(await claude.callTool({ name: 'whoami', arguments: {} })).name).toBe('claude-code');
     await claude.close();
 
-    await app.pool.query(`UPDATE users SET oauth_split_clients = true WHERE id = $1`, [account.id]);
     const split = await connectClient(app.baseUrl, 'oauth-cursor', 'cursor');
     expect(toolJson(await split.callTool({ name: 'whoami', arguments: {} })).name).toBe('cursor');
     await split.close();
@@ -116,6 +119,122 @@ describe('oauth registration', () => {
       [account.id, cursorClientId],
     );
     expect(grants.rows.map((row) => row.origin_name)).toEqual(['cursor', 'cursor-grok']);
+  });
+
+  it('gives a second agent on a shared client id its own bot instead of the first one', async () => {
+    const account = await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
+    const column = await app.pool.query<{ column_default: string }>(
+      `SELECT column_default FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oauth_split_clients'`,
+    );
+    expect(column.rows[0]?.column_default).toBe('true');
+    // The first Grok Bot was bound by hand to an existing bot, the way grokbot-aziz was.
+    const aziz = await addBot(app.pool, { name: 'grokbot-aziz', ownerUserId: account.id });
+    await bindOAuthGrant(app.pool, account.id, { botId: aziz.bot.id, clientId: grokClientId });
+
+    const first = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Aziz' });
+    expect(toolJson(await first.callTool({ name: 'whoami', arguments: {} })).name).toBe('grokbot-aziz');
+    await first.close();
+
+    const second = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Ajeg' });
+    const who = toolJson(await second.callTool({ name: 'whoami', arguments: {} }));
+    expect(who.name).toBe('grok-bot-ajeg');
+    expect(who.id).not.toBe(aziz.bot.id);
+    await second.close();
+
+    // Each agent reconnecting lands on its own bot again.
+    const firstAgain = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Aziz' });
+    expect(toolJson(await firstAgain.callTool({ name: 'whoami', arguments: {} })).name).toBe('grokbot-aziz');
+    await firstAgain.close();
+    const secondAgain = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Ajeg' });
+    expect(toolJson(await secondAgain.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot-ajeg');
+    await secondAgain.close();
+
+    const grants = await app.pool.query<{ origin_name: string; bot_name: string }>(
+      `SELECT g.origin_name, b.name AS bot_name FROM oauth_grants g JOIN bots b ON b.id = g.bot_id
+       WHERE g.user_id = $1 AND g.clerk_client_id = $2 AND g.revoked_at IS NULL ORDER BY g.origin_name`,
+      [account.id, grokClientId],
+    );
+    expect(grants.rows).toEqual([
+      { origin_name: 'grok-bot-ajeg', bot_name: 'grok-bot-ajeg' },
+      { origin_name: 'grok-bot-aziz', bot_name: 'grokbot-aziz' },
+    ]);
+  });
+
+  it('keeps one MCP session on its bot across requests', async () => {
+    await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
+    const one = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'One' });
+    const two = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Two' });
+    for (let i = 0; i < 3; i += 1) {
+      expect(toolJson(await one.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot-one');
+      expect(toolJson(await two.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot-two');
+    }
+    await one.close();
+    await two.close();
+
+    // Without initialize or a session there is no client name. With two bots on this client id that is a guess, so refuse.
+    const guess = await fetch(`${app.baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer oauth-grok',
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(guess.status).toBe(401);
+    const bots = await app.pool.query(`SELECT 1 FROM bots`);
+    expect(bots.rowCount).toBe(2);
+  });
+
+  it('lets X-Botbridge-Bot win over an existing grant for the same client', async () => {
+    const account = await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
+    const first = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot');
+    expect(toolJson(await first.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot');
+    await first.close();
+
+    // Identical clientInfo: only the header can tell this agent apart. It gets the named bot, created on first use.
+    const pinned = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { headers: { 'X-Botbridge-Bot': 'grokbot-ajeg' } });
+    expect(toolJson(await pinned.callTool({ name: 'whoami', arguments: {} })).name).toBe('grokbot-ajeg');
+    await pinned.close();
+    const pinnedAgain = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { headers: { 'X-Botbridge-Bot': 'grokbot-ajeg' } });
+    expect(toolJson(await pinnedAgain.callTool({ name: 'whoami', arguments: {} })).name).toBe('grokbot-ajeg');
+    await pinnedAgain.close();
+
+    // A pin to a bot that already exists in the account binds to it.
+    await addBot(app.pool, { name: 'ada-writer', ownerUserId: account.id });
+    const writer = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { headers: { 'X-Botbridge-Bot': 'ada-writer' } });
+    expect(toolJson(await writer.callTool({ name: 'whoami', arguments: {} })).name).toBe('ada-writer');
+    await writer.close();
+
+    // The unpinned agent still has its own bot.
+    const unpinned = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot');
+    expect(toolJson(await unpinned.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot');
+    await unpinned.close();
+
+    const names = await app.pool.query<{ name: string }>(`SELECT name FROM bots ORDER BY name`);
+    expect(names.rows.map((row) => row.name)).toEqual(['ada-writer', 'grok-bot', 'grokbot-ajeg']);
+
+    // A pin to a paused bot is refused rather than minting a replacement.
+    await app.pool.query(`UPDATE bots SET revoked_at = now() WHERE name = 'ada-writer'`);
+    await expect(
+      connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { headers: { 'X-Botbridge-Bot': 'ada-writer' } }),
+    ).rejects.toThrow();
+    const after = await app.pool.query(`SELECT 1 FROM bots`);
+    expect(after.rowCount).toBe(3);
+  });
+
+  it('can still share one bot across client names when the account opts out', async () => {
+    const account = await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
+    await app.pool.query(`UPDATE users SET oauth_split_clients = false WHERE id = $1`, [account.id]);
+    const first = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Aziz' });
+    expect(toolJson(await first.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot-aziz');
+    await first.close();
+    const shared = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { title: 'Ajeg' });
+    expect(toolJson(await shared.callTool({ name: 'whoami', arguments: {} })).name).toBe('grok-bot-aziz');
+    await shared.close();
+    const pinned = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { headers: { 'X-Botbridge-Bot': 'grokbot-ajeg' } });
+    expect(toolJson(await pinned.callTool({ name: 'whoami', arguments: {} })).name).toBe('grokbot-ajeg');
+    await pinned.close();
   });
 
   it('falls back to the OAuth client host when the request is not initialize', async () => {

@@ -10,13 +10,13 @@ function labelize(key: string): string {
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [split, setSplit] = useState(false);
+  const [split, setSplit] = useState(true);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     api<Settings>('/api/admin/settings')
       .then((body) => {
         setSettings(body);
-        setSplit(body.oauthSplitClients === true);
+        setSplit(body.oauthSplitClients !== false);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
   }, []);
@@ -51,8 +51,10 @@ export function SettingsPage() {
           <section className="panel wide">
             <h2>Shared OAuth client ids</h2>
             <p className="muted">
-              Some apps share one OAuth client id. With this on, a different client name at initialize gets its own bot.
-              Leave it off to keep one bot for that client id. You can move a connection from Connections.
+              Some apps share one OAuth client id, and copies of one app (two Grok Bots) do too. With this on, the default,
+              a different client name at initialize gets its own bot, so one agent never acts as another. Turn it off only
+              for a client whose name changes between runs: every name on that client id then shares the first bot.
+              X-Botbridge-Bot always picks the bot. You can move a connection from Connections.
             </p>
             <form
               className="stack mt-4"
@@ -66,7 +68,7 @@ export function SettingsPage() {
             >
               <label className="check">
                 <input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} />
-                <span>Register a separate bot when the client name changes</span>
+                <span>Register a separate bot when the client name changes (recommended)</span>
               </label>
               <div className="button-row">
                 <Button type="submit">Save</Button>
