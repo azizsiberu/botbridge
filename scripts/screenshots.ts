@@ -85,16 +85,18 @@ async function main(): Promise<void> {
     await mkdir('/tmp/shots', { recursive: true });
     const base = `http://127.0.0.1:${running.port}`;
     const pages: Array<[string, string, number]> = [
-      ['/', 'overview', 1100],
+      ['/', 'home', 1100],
+      ['/overview', 'overview', 1200],
       ['/connections', 'connections', 1000],
       ['/bots', 'bots', 1100],
-      [`/bots/${ada.bot.id}`, 'bot', 1700],
+      [`/bots/${ada.bot.id}`, 'bot', 2200],
+      ['/keys', 'keys', 1000],
       ['/mail', 'mail', 1100],
-      [`/mail/${thread}`, 'thread', 1000],
+      [`/mail/${thread}`, 'thread', 1100],
       ['/tasks', 'tasks', 1000],
-      ['/audit', 'audit', 1000],
-      ['/doorbell', 'doorbell', 900],
-      ['/settings', 'settings', 1100],
+      ['/audit', 'audit', 1100],
+      ['/doorbell', 'doorbell', 1000],
+      ['/settings', 'settings', 1400],
       ['/admin', 'admin', 1100],
       ['/oauth/choose?client_id=chatgpt', 'choose', 1000],
     ];
@@ -109,9 +111,13 @@ async function main(): Promise<void> {
         await shot(url, `/tmp/shots/${name}-${theme}-390.png`, 390, 1200);
       }
     }
+    if (!only || only.includes('home')) {
+      await shot(`${base}/?theme=dark`, new URL('home-mobile.png', out).pathname, 390, 900);
+      await shot(`${base}/?theme=light`, new URL('home-mobile-light.png', out).pathname, 390, 900);
+    }
     if (!only || only.includes('overview')) {
-      await shot(`${base}/?theme=dark`, new URL('overview-mobile.png', out).pathname, 390, 900);
-      await shot(`${base}/?theme=light`, new URL('overview-mobile-light.png', out).pathname, 390, 900);
+      await shot(`${base}/overview?theme=dark`, new URL('overview-mobile.png', out).pathname, 390, 900);
+      await shot(`${base}/overview?theme=light`, new URL('overview-mobile-light.png', out).pathname, 390, 900);
     }
   } finally {
     await running.close();

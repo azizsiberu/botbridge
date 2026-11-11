@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { api, type Bot } from '../api';
-import { Button, DataTable, Dialog, ErrorNote, Field, Loading, PageTitle, Status, control } from '../ui';
+import { Button, Dialog, ErrorNote, FeedItem, FeedList, Field, Loading, PageTitle, Status, control } from '../ui';
 
 export function BotsPage() {
   const [query, setQuery] = useState('');
@@ -24,7 +23,7 @@ export function BotsPage() {
   return (
     <div>
       <PageTitle
-        title="Bots"
+        title="Manage bots"
         lede="A bot appears when a client connects. Rename it, revoke it, or set a doorbell. Secrets live on API keys."
         action={<Button onClick={() => setOpen(true)}>New bot</Button>}
       />
@@ -44,21 +43,24 @@ export function BotsPage() {
       {!bots && !error ? <Loading label="Loading bots." /> : null}
       {bots?.length === 0 ? <Onboarding onCreate={() => setOpen(true)} /> : null}
       {bots && bots.length > 0 ? (
-        <DataTable label="Bots">
-          <thead>
-            <tr><th>Name</th><th>Status</th><th>Doorbell</th><th>Description</th></tr>
-          </thead>
-          <tbody>
-            {bots.map((bot) => (
-              <tr key={bot.id}>
-                <td><Link className="row-link" to={`/bots/${bot.id}`}>{bot.name}</Link></td>
-                <td><Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status></td>
-                <td>{bot.webhook?.profile ?? '—'}</td>
-                <td className="clip">{bot.description || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <FeedList label="Bots">
+          {bots.map((bot) => (
+            <FeedItem
+              key={bot.id}
+              to={`/bots/${bot.id}`}
+              name={bot.name}
+              title={bot.name}
+              detail={bot.description || 'No description'}
+              clip
+              meta={
+                <>
+                  <Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status>
+                  <span>{bot.webhook?.profile ? `Doorbell ${bot.webhook.profile}` : 'No doorbell'}</span>
+                </>
+              }
+            />
+          ))}
+        </FeedList>
       ) : null}
       {open ? (
         <CreateBot

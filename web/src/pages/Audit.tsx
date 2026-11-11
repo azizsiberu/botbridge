@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type AuditEntry } from '../api';
-import { DataTable, Empty, ErrorNote, PageTitle, control, time } from '../ui';
+import { Empty, ErrorNote, FeedItem, FeedList, PageTitle, control, time } from '../ui';
 
 export function AuditPage() {
   const [action, setAction] = useState('');
@@ -27,22 +27,17 @@ export function AuditPage() {
       {error ? <ErrorNote message={error} /> : null}
       {entries?.length === 0 ? <Empty title="No audit entries" body="Sends, tasks, token rotations, and doorbell tests are written here." /> : null}
       {entries && entries.length > 0 ? (
-        <DataTable label="Audit log">
-          <thead>
-            <tr><th>When</th><th>Action</th><th>Actor</th><th>Target</th><th>Resource</th></tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.id}>
-                <td>{time(entry.created_at)}</td>
-                <td>{entry.action}</td>
-                <td>{entry.actor_name ?? 'system'}</td>
-                <td>{entry.target_name ?? '—'}</td>
-                <td>{entry.resource_type}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <FeedList label="Audit log">
+          {entries.map((entry) => (
+            <FeedItem
+              key={entry.id}
+              name={entry.actor_name ?? 'system'}
+              title={entry.action}
+              when={<time dateTime={entry.created_at}>{time(entry.created_at)}</time>}
+              detail={entry.target_name ? `${entry.target_name} · ${entry.resource_type}` : entry.resource_type}
+            />
+          ))}
+        </FeedList>
       ) : null}
     </div>
   );

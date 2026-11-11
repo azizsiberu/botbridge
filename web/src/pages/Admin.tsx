@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { Button, DataTable, ErrorNote, Field, Loading, PageTitle, Status, control } from '../ui';
+import { Button, ErrorNote, FeedItem, FeedList, Field, Loading, PageTitle, Status, control } from '../ui';
 
 interface UserRow {
   id: string;
@@ -64,34 +64,35 @@ export function AdminPage() {
         </form>
       </section>
       {users && users.length > 0 ? (
-        <DataTable label="Accounts">
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Bots</th><th>Status</th><th>Action</th></tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.display_name}</td>
-                <td>{user.email ?? 'No email'}</td>
-                <td>{user.bots}</td>
-                <td><Status tone={user.status === 'active' ? 'ok' : 'danger'}>{user.status}</Status></td>
-                <td>
-                  <Button
-                    tone="secondary"
-                    onClick={() =>
-                      api(`/api/admin/admin/users/${user.id}/suspend`, {
-                        method: 'POST',
-                        body: JSON.stringify({ suspended: user.status === 'active' }),
-                      }).then(load)
-                    }
-                  >
-                    {user.status === 'active' ? 'Suspend' : 'Restore'}
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <FeedList label="Accounts">
+          {users.map((user) => (
+            <FeedItem
+              key={user.id}
+              name={user.display_name}
+              title={user.display_name}
+              detail={user.email ?? 'No email'}
+              meta={
+                <>
+                  <Status tone={user.status === 'active' ? 'ok' : 'danger'}>{user.status}</Status>
+                  <span>{user.bots} bots</span>
+                </>
+              }
+              actions={
+                <Button
+                  tone="secondary"
+                  onClick={() =>
+                    api(`/api/admin/admin/users/${user.id}/suspend`, {
+                      method: 'POST',
+                      body: JSON.stringify({ suspended: user.status === 'active' }),
+                    }).then(load)
+                  }
+                >
+                  {user.status === 'active' ? 'Suspend' : 'Restore'}
+                </Button>
+              }
+            />
+          ))}
+        </FeedList>
       ) : null}
     </div>
   );

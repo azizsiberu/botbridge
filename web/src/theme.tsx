@@ -36,30 +36,32 @@ export function clerkAppearance(theme: ThemeName) {
   const dark = theme === 'dark';
   return {
     variables: {
-      colorPrimary: dark ? '#B6E4EA' : '#0F5C6B',
+      colorPrimary: dark ? '#F5F5F5' : '#142028',
       colorDanger: dark ? '#FFB4A8' : '#8A221C',
       colorSuccess: dark ? '#9BE8C0' : '#0B5130',
-      colorBackground: dark ? '#152028' : '#F5F8FA',
-      colorText: dark ? '#E7EEF2' : '#142028',
-      colorTextSecondary: dark ? '#C3D0D8' : '#3C5160',
-      colorInputBackground: dark ? '#0C1419' : '#F5F8FA',
-      colorInputText: dark ? '#E7EEF2' : '#142028',
-      colorNeutral: dark ? '#C3D0D8' : '#3C5160',
-      borderRadius: '4px',
-      fontFamily: '"Familjen Grotesk", sans-serif',
+      colorBackground: dark ? '#181818' : '#F5F8FA',
+      colorText: dark ? '#F5F5F5' : '#142028',
+      colorTextSecondary: dark ? '#A0A0A0' : '#3C5160',
+      colorInputBackground: dark ? '#101010' : '#E4EBF0',
+      colorInputText: dark ? '#F5F5F5' : '#142028',
+      colorNeutral: dark ? '#A0A0A0' : '#3C5160',
+      borderRadius: '12px',
+      fontFamily: 'Inter, sans-serif',
       fontSize: '15px',
     },
     elements: {
       card: {
         boxShadow: 'none',
-        border: `1px solid ${dark ? '#2A3C48' : '#D5E0E6'}`,
-        backgroundColor: dark ? '#152028' : '#F5F8FA',
+        border: `1px solid ${dark ? '#303030' : '#D5E0E6'}`,
+        backgroundColor: dark ? '#181818' : '#F5F8FA',
+        borderRadius: '18px',
       },
       formButtonPrimary: {
-        backgroundColor: dark ? '#B6E4EA' : '#0F5C6B',
-        color: dark ? '#06262C' : '#F4FBFC',
+        backgroundColor: dark ? '#F5F5F5' : '#142028',
+        color: dark ? '#101010' : '#F5F8FA',
+        borderRadius: '12px',
       },
-      footerActionLink: { color: dark ? '#B6E4EA' : '#0F5C6B' },
+      footerActionLink: { color: dark ? '#F5F5F5' : '#142028' },
     },
   };
 }

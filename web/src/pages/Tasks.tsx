@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Task } from '../api';
-import { DataTable, Dialog, Empty, ErrorNote, PageTitle, Status, control, time } from '../ui';
+import { Dialog, Empty, ErrorNote, FeedItem, FeedList, PageTitle, Status, control, time } from '../ui';
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -30,24 +30,19 @@ export function TasksPage() {
             return (
               <section key={status}>
                 <h2 className="mb-3">{status === 'open' ? 'Open' : 'Completed'}</h2>
-                <DataTable label={status === 'open' ? 'Open tasks' : 'Completed tasks'}>
-                  <thead>
-                    <tr><th>From</th><th>To</th><th>Status</th><th>When</th><th>Instructions</th></tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((task) => (
-                      <tr key={task.id}>
-                        <td>{task.from.name}</td>
-                        <td>{task.to.name}</td>
-                        <td><Status tone={task.status === 'open' ? 'warn' : 'ok'}>{task.status}</Status></td>
-                        <td>{time(task.created_at)}</td>
-                        <td>
-                          <button type="button" className="btn-link" onClick={() => setOpen(task)}>{task.instructions}</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </DataTable>
+                <FeedList label={status === 'open' ? 'Open tasks' : 'Completed tasks'}>
+                  {rows.map((task) => (
+                    <FeedItem
+                      key={task.id}
+                      name={task.from.name}
+                      title={`${task.from.name} to ${task.to.name}`}
+                      when={<time dateTime={task.created_at}>{time(task.created_at)}</time>}
+                      detail={task.instructions}
+                      meta={<Status tone={task.status === 'open' ? 'warn' : 'ok'}>{task.status}</Status>}
+                      onClick={() => setOpen(task)}
+                    />
+                  ))}
+                </FeedList>
               </section>
             );
           })}

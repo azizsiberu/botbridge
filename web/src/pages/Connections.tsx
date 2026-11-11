@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection, type Grant } from '../api';
-import { Button, DataTable, Empty, ErrorNote, Loading, PageTitle, Status, time } from '../ui';
+import { Button, Empty, ErrorNote, FeedItem, FeedList, Loading, PageTitle, Status, time } from '../ui';
 import { PendingBotRequests, PendingOAuthClients } from './PendingOAuth';
 
 export function ConnectionsPage() {
@@ -53,38 +53,34 @@ function OAuthGrants({ grants, onRevoke, onError }: { grants: Grant[] | null; on
     <section className="section">
       <h2>Signed-in clients</h2>
       <p className="lede">Each OAuth client is a bot. Bind it to a different bot when the automatic one is the wrong mailbox.</p>
-      <DataTable label="OAuth clients">
-        <thead>
-          <tr><th>Client</th><th>Bot</th><th>Origin</th><th>Since</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          {grants.map((grant) => (
-            <tr key={grant.id}>
-              <td>{grant.label || grant.client_id}</td>
-              <td>{grant.bot.name}</td>
-              <td>{grant.origin_name ?? '—'}</td>
-              <td>{time(grant.created_at)}</td>
-              <td>
-                <div className="button-row">
-                  <Button to={`/oauth/choose?${new URLSearchParams({ client_id: grant.client_id, grant_id: grant.id }).toString()}`}>
-                    Use a different bot
-                  </Button>
-                  <Button
-                    tone="danger"
-                    onClick={() => {
-                      api(`/api/admin/grants/${grant.id}/revoke`, { method: 'POST' })
-                        .then(onRevoke)
-                        .catch((err: unknown) => onError(err instanceof Error ? err.message : 'Failed'));
-                    }}
-                  >
-                    Revoke
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </DataTable>
+      <FeedList label="OAuth clients">
+        {grants.map((grant) => (
+          <FeedItem
+            key={grant.id}
+            name={grant.bot.name}
+            title={grant.label || grant.client_id}
+            when={<time dateTime={grant.created_at}>{time(grant.created_at)}</time>}
+            detail={`Uses ${grant.bot.name}${grant.origin_name ? ` · ${grant.origin_name}` : ''}`}
+            actions={
+              <>
+                <Button to={`/oauth/choose?${new URLSearchParams({ client_id: grant.client_id, grant_id: grant.id }).toString()}`}>
+                  Use a different bot
+                </Button>
+                <Button
+                  tone="danger"
+                  onClick={() => {
+                    api(`/api/admin/grants/${grant.id}/revoke`, { method: 'POST' })
+                      .then(onRevoke)
+                      .catch((err: unknown) => onError(err instanceof Error ? err.message : 'Failed'));
+                  }}
+                >
+                  Revoke
+                </Button>
+              </>
+            }
+          />
+        ))}
+      </FeedList>
     </section>
   );
 }
@@ -94,34 +90,27 @@ function Section({ title, rows, onDecide }: { title: string; rows: Connection[];
   return (
     <section className="section">
       <h2>{title}</h2>
-      <DataTable label={title}>
-        <thead>
-          <tr><th>From</th><th>To</th><th>Kind</th><th>Status</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>{label(row.from)}</td>
-              <td>{label(row.to)}</td>
-              <td>{row.kind}</td>
-              <td><Status tone={row.status === 'active' ? 'ok' : 'warn'}>{row.status}</Status></td>
-              <td>
-                <div className="button-row">
-                  {row.direction === 'incoming' && row.status === 'pending' && onDecide ? (
-                    <>
-                      <Button onClick={() => act(row.id, 'approve', onDecide)}>Approve</Button>
-                      <Button tone="secondary" onClick={() => act(row.id, 'decline', onDecide)}>Decline</Button>
-                    </>
-                  ) : null}
-                  {row.status === 'active' && onDecide ? (
-                    <Button tone="danger" onClick={() => act(row.id, 'revoke', onDecide)}>Revoke</Button>
-                  ) : null}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </DataTable>
+      <FeedList label={title}>
+        {rows.map((row) => (
+          <FeedItem
+            key={row.id}
+            name={row.from.name}
+            title={`${label(row.from)} → ${label(row.to)}`}
+            detail={row.kind}
+            meta={<Status tone={row.status === 'active' ? 'ok' : 'warn'}>{row.status}</Status>}
+            actions={
+              row.direction === 'incoming' && row.status === 'pending' && onDecide ? (
+                <>
+                  <Button onClick={() => act(row.id, 'approve', onDecide)}>Approve</Button>
+                  <Button tone="secondary" onClick={() => act(row.id, 'decline', onDecide)}>Decline</Button>
+                </>
+              ) : row.status === 'active' && onDecide ? (
+                <Button tone="danger" onClick={() => act(row.id, 'revoke', onDecide)}>Revoke</Button>
+              ) : undefined
+            }
+          />
+        ))}
+      </FeedList>
     </section>
   );
 }

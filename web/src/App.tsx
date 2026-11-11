@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { allowedRedirectUrl, withRedirect, withoutRedirectParam } from '../../src/redirect';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
 import { Shell } from './Shell';
+import { Icon } from './social';
 import { clerkAppearance, ThemeButton, useTheme } from './theme';
 import { AuditPage } from './pages/Audit';
 import { BotPage } from './pages/Bot';
@@ -85,7 +86,7 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
       <div className="auth">
         <div className="auth-card">
           <div className="auth-top">
-            <p className="brand">botbridge</p>
+            <p className="brand"><Icon name="Brand" /> botbridge</p>
             <ThemeButton />
           </div>
           <p className="lede">{lede}</p>
