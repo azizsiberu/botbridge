@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Delivery } from '../api';
-import { DataTable, Empty, ErrorNote, PageTitle, Status, control, time } from '../ui';
+import { Empty, ErrorNote, FeedItem, FeedList, PageTitle, Status, control, time } from '../ui';
 
 const states = ['', 'delivered', 'pending', 'failed'] as const;
 
@@ -21,7 +21,7 @@ export function DoorbellPage() {
 
   return (
     <div>
-      <PageTitle title="Doorbell" lede="Webhook deliveries, including retries." />
+      <PageTitle title="Deliveries" lede="Webhook deliveries, including retries." />
       <div className="filters cols-2">
         <input className={control} aria-label="Bot name" placeholder="Bot name" value={bot} onChange={(event) => setBot(event.target.value)} />
         <select className={control} aria-label="State" value={state} onChange={(event) => setState(event.target.value as (typeof states)[number])}>
@@ -31,23 +31,23 @@ export function DoorbellPage() {
       {error ? <ErrorNote message={error} /> : null}
       {rows?.length === 0 ? <Empty title="No deliveries" body="A test ping, or a message to a bot with a webhook, is listed here." /> : null}
       {rows && rows.length > 0 ? (
-        <DataTable label="Doorbell deliveries">
-          <thead>
-            <tr><th>Bot</th><th>Event</th><th>State</th><th>Attempts</th><th>When</th><th>Detail</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.bot.name}</td>
-                <td>{row.event}</td>
-                <td><Status tone={row.state === 'delivered' ? 'ok' : row.state === 'failed' ? 'danger' : 'warn'}>{row.state}</Status></td>
-                <td>{row.attempts}/{row.max_attempts}</td>
-                <td>{time(row.created_at)}</td>
-                <td className="clip">{row.last_error ?? (row.last_status ? `HTTP ${row.last_status}` : '—')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <FeedList label="Doorbell deliveries">
+          {rows.map((row) => (
+            <FeedItem
+              key={row.id}
+              name={row.bot.name}
+              title={`${row.bot.name} · ${row.event}`}
+              when={<time dateTime={row.created_at}>{time(row.created_at)}</time>}
+              detail={row.last_error ?? (row.last_status ? `HTTP ${row.last_status}` : 'No delivery detail')}
+              meta={
+                <>
+                  <Status tone={row.state === 'delivered' ? 'ok' : row.state === 'failed' ? 'danger' : 'warn'}>{row.state}</Status>
+                  <span>{row.attempts}/{row.max_attempts} attempts</span>
+                </>
+              }
+            />
+          ))}
+        </FeedList>
       ) : null}
     </div>
   );

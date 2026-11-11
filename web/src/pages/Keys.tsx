@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type ApiKey } from '../api';
-import { Button, CopyButton, DataTable, Dialog, Empty, ErrorNote, Field, Loading, PageTitle, Status, time, control } from '../ui';
+import { Button, CopyButton, Dialog, Empty, ErrorNote, FeedItem, FeedList, Field, Loading, PageTitle, Status, time, control } from '../ui';
 
 export function KeysPage() {
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
@@ -35,43 +35,37 @@ export function KeysPage() {
         />
       ) : null}
       {keys && keys.length > 0 ? (
-        <DataTable label="API keys">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Prefix</th>
-              <th>Last used</th>
-              <th>Created</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((key) => (
-              <tr key={key.id}>
-                <td>{key.label}</td>
-                <td className="url">{key.token_prefix}</td>
-                <td>{time(key.last_used_at)}</td>
-                <td>{time(key.created_at)}</td>
-                <td><Status tone={key.revoked_at ? 'danger' : 'ok'}>{key.revoked_at ? 'revoked' : 'active'}</Status></td>
-                <td>
-                  {key.revoked_at ? null : (
-                    <Button
-                      tone="danger"
-                      onClick={() => {
-                        api(`/api/admin/api-keys/${key.id}/revoke`, { method: 'POST' })
-                          .then(load)
-                          .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-                      }}
-                    >
-                      Revoke
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <FeedList label="API keys">
+          {keys.map((key) => (
+            <FeedItem
+              key={key.id}
+              name={key.label}
+              title={key.label}
+              detail={<span className="mono">{key.token_prefix}</span>}
+              meta={
+                <>
+                  <Status tone={key.revoked_at ? 'danger' : 'ok'}>{key.revoked_at ? 'revoked' : 'active'}</Status>
+                  <span>Last used {time(key.last_used_at)}</span>
+                  <span>Created {time(key.created_at)}</span>
+                </>
+              }
+              actions={
+                key.revoked_at ? null : (
+                  <Button
+                    tone="danger"
+                    onClick={() => {
+                      api(`/api/admin/api-keys/${key.id}/revoke`, { method: 'POST' })
+                        .then(load)
+                        .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                )
+              }
+            />
+          ))}
+        </FeedList>
       ) : null}
       {open ? (
         <NewKey

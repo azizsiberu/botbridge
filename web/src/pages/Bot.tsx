@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, type Bot, type Delivery, type Guide } from '../api';
 import { Avatar } from '../social';
-import { Button, CopyButton, DataTable, ErrorNote, Field, PageTitle, Status, control } from '../ui';
+import { Button, CopyButton, ErrorNote, FeedItem, FeedList, Field, Status, control } from '../ui';
 
 const profiles = ['generic', 'openbot', 'grok'] as const;
 
@@ -46,18 +46,15 @@ export function BotPage() {
 
   return (
     <div>
-      <p className="back"><Link to="/bots">Bots</Link></p>
-      <section className="profile-summary"><Avatar name={bot.name} large /><div><h1>{bot.name}</h1><p>{bot.description || 'An AI agent on Botbridge.'}</p><Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status><div className="button-row mt-3"><Link className="btn btn-secondary" to={`/mail?bot=${encodeURIComponent(bot.name)}`}>View inbox</Link></div></div></section>
-      <PageTitle
-        title="Manage bot"
-        lede={
-          <>
-            <Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status>
-            {bot.description ? <span className="mt-2 block">{bot.description}</span> : null}
-          </>
-        }
-        action={
-          <>
+      <p className="back"><Link to="/bots">Manage bots</Link></p>
+      <section className="profile-summary">
+        <Avatar name={bot.name} large />
+        <div>
+          <h1>{bot.name}</h1>
+          <p>{bot.description || 'An AI agent on Botbridge.'}</p>
+          <Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status>
+          <div className="button-row mt-3">
+            <Link className="btn btn-secondary" to={`/mail?bot=${encodeURIComponent(bot.name)}`}>View inbox</Link>
             {bot.status === 'active' ? (
               <Button tone="danger" onClick={() => api(`/api/admin/bots/${bot.id}/revoke`, { method: 'POST' }).then(load).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'))}>
                 Revoke
@@ -67,9 +64,9 @@ export function BotPage() {
                 Reactivate
               </Button>
             )}
-          </>
-        }
-      />
+          </div>
+        </div>
+      </section>
       {error ? <div className="mb-4"><ErrorNote message={error} /></div> : null}
       <div className="split">
         <section className="panel">
@@ -146,21 +143,19 @@ export function BotPage() {
       <section className="section">
         <h2>Who this bot can reach</h2>
         <p className="lede mb-3">Same-account bots are open. Other names appear only after a connection is approved.</p>
-        <DataTable label="Reachable bots">
-          <thead>
-            <tr><th>Name</th><th>Relation</th><th>Owner</th></tr>
-          </thead>
-          <tbody>
-            {reach.length === 0 ? <tr><td colSpan={3}>No other bots yet.</td></tr> : null}
+        {reach.length === 0 ? <p className="muted">No other bots yet.</p> : (
+          <FeedList label="Reachable bots">
             {reach.map((item) => (
-              <tr key={item.name}>
-                <td>{item.name}</td>
-                <td>{item.relation.replaceAll('_', ' ')}</td>
-                <td>{item.owner.display_name}</td>
-              </tr>
+              <FeedItem
+                key={item.name}
+                name={item.name}
+                title={item.name}
+                detail={item.relation.replaceAll('_', ' ')}
+                meta={<span>{item.owner.display_name}</span>}
+              />
             ))}
-          </tbody>
-        </DataTable>
+          </FeedList>
+        )}
       </section>
       <section className="section panel">
         <h2>Connect</h2>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PendingOAuthClient, type RegistrationRequest } from '../api';
-import { Button, DataTable, time } from '../ui';
+import { Button, FeedItem, FeedList, time } from '../ui';
 
 export function PendingOAuthClients({
   presentation = 'banner',
@@ -35,30 +35,19 @@ export function PendingOAuthClients({
     <section className="section" role="status" style={presentation === 'banner' ? { marginTop: 0 } : undefined}>
       <h2>Registration needs attention</h2>
       <p className="lede">These clients signed in and did not get a bot. Connect again, or bind the client to a bot you already have.</p>
-      <DataTable label="OAuth clients that did not register">
-        <thead>
-          <tr>
-            <th>Client</th>
-            <th>Client id</th>
-            <th>Tried</th>
-            <th>What happened</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clients.map((client) => (
-            <tr key={client.client_id}>
-              <td>{client.name}</td>
-              <td className="url">{client.client_id}</td>
-              <td>{time(client.last_seen_at)}</td>
-              <td>{client.last_error ?? 'Connect the client again to register it.'}</td>
-              <td>
-                <Button to={bindPath(client.client_id)}>Bind to an existing bot</Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </DataTable>
+      <FeedList label="OAuth clients that did not register">
+        {clients.map((client) => (
+          <FeedItem
+            key={client.client_id}
+            name={client.name}
+            title={client.name}
+            when={<time dateTime={client.last_seen_at}>{time(client.last_seen_at)}</time>}
+            detail={client.last_error ?? 'Connect the client again to register it.'}
+            meta={<span className="mono">{client.client_id}</span>}
+            actions={<Button to={bindPath(client.client_id)}>Bind to an existing bot</Button>}
+          />
+        ))}
+      </FeedList>
     </section>
   );
 }
@@ -108,35 +97,24 @@ export function PendingBotRequests({ onChange }: { onChange?: () => void }) {
         other bots, but not to other accounts until they approve it.
       </p>
       {error ? <p className="lede">{error}</p> : null}
-      <DataTable label="Bot registration requests">
-        <thead>
-          <tr>
-            <th>Bot name</th>
-            <th>From</th>
-            <th>Why it waits</th>
-            <th>Tries</th>
-            <th>Last try</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>{row.requested_name}</td>
-              <td className="url">{row.label ? `${row.label} (${row.client})` : row.client}</td>
-              <td>{(row.reason && REASONS[row.reason]) ?? row.reason ?? '—'}</td>
-              <td>{row.attempts}</td>
-              <td>{time(row.last_seen_at)}</td>
-              <td>
-                <div className="button-row">
-                  <Button onClick={() => decide(row.id, 'approve')}>Approve</Button>
-                  <Button tone="secondary" onClick={() => decide(row.id, 'decline')}>Decline</Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </DataTable>
+      <FeedList label="Bot registration requests">
+        {rows.map((row) => (
+          <FeedItem
+            key={row.id}
+            name={row.requested_name}
+            title={row.requested_name}
+            when={<time dateTime={row.last_seen_at}>{time(row.last_seen_at)}</time>}
+            detail={(row.reason && REASONS[row.reason]) ?? row.reason ?? 'Waiting for a decision.'}
+            meta={<span>{row.label ? `${row.label} (${row.client})` : row.client} · {row.attempts} tries</span>}
+            actions={
+              <>
+                <Button onClick={() => decide(row.id, 'approve')}>Approve</Button>
+                <Button tone="secondary" onClick={() => decide(row.id, 'decline')}>Decline</Button>
+              </>
+            }
+          />
+        ))}
+      </FeedList>
     </section>
   );
 }

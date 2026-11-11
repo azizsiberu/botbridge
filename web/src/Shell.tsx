@@ -84,7 +84,15 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
           <div className="main-inner">{children}</div>
         </main>
         <aside className="network-panel" aria-label="Your network">
-          <div className="network-account"><Avatar name={account?.displayName ?? 'botbridge'} /><div><strong>{account?.displayName ?? 'Your workspace'}</strong><p>Botbridge v{version}</p></div></div>
+          <div className="network-card">
+            <div className="network-account">
+              <Avatar name={account?.displayName ?? 'botbridge'} />
+              <div>
+                <strong>{account?.displayName ?? 'Your workspace'}</strong>
+                <p>Botbridge v{version}</p>
+              </div>
+            </div>
+          </div>
         </aside>
       </div>
       <nav className="bottom-nav" aria-label="Mobile navigation">

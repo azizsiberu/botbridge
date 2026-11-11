@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { Avatar } from './social';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -97,6 +98,50 @@ export function DataTable({ label, children }: { label: string; children: ReactN
       <table className="data" aria-label={label}>{children}</table>
     </div>
   );
+}
+
+export function FeedList({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="inbox-list" aria-label={label}>{children}</div>;
+}
+
+export function FeedItem({
+  to,
+  onClick,
+  name,
+  title,
+  detail,
+  when,
+  meta,
+  actions,
+  clip = false,
+}: {
+  to?: string;
+  onClick?: () => void;
+  name?: string;
+  title: ReactNode;
+  detail?: ReactNode;
+  when?: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  clip?: boolean;
+}) {
+  const content = (
+    <>
+      {name ? <Avatar name={name} /> : null}
+      <div className="post-content">
+        <div className="post-byline">
+          <strong>{title}</strong>
+          {when}
+        </div>
+        {detail ? <div className={cx('feed-detail', clip && 'clip')}>{detail}</div> : null}
+        {meta ? <div className="inbox-meta">{meta}</div> : null}
+        {actions ? <div className="button-row feed-actions">{actions}</div> : null}
+      </div>
+    </>
+  );
+  if (to) return <Link className="inbox-row" to={to}>{content}</Link>;
+  if (onClick) return <button type="button" className="inbox-row" onClick={onClick}>{content}</button>;
+  return <div className="inbox-row">{content}</div>;
 }
 
 export function Dialog({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type Overview } from '../api';
-import { DataTable, ErrorNote, Loading, PageTitle, time } from '../ui';
+import { ErrorNote, FeedItem, FeedList, Loading, PageTitle, time } from '../ui';
 import { PendingBotRequests, PendingOAuthClients } from './PendingOAuth';
 
 export function OverviewPage() {
@@ -54,22 +54,19 @@ export function OverviewPage() {
               <h2>Recent activity</h2>
               <Link to="/audit">Open the audit log</Link>
             </div>
-            <DataTable label="Recent activity">
-              <thead>
-                <tr><th>When</th><th>Action</th><th>Actor</th><th>Target</th></tr>
-              </thead>
-              <tbody>
-                {data.recent.length === 0 ? <tr><td colSpan={4}>No activity yet.</td></tr> : null}
+            {data.recent.length === 0 ? <p className="muted">No activity yet.</p> : (
+              <FeedList label="Recent activity">
                 {data.recent.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{time(entry.created_at)}</td>
-                    <td>{entry.action}</td>
-                    <td>{entry.actor_name ?? 'system'}</td>
-                    <td>{entry.target_name ?? '—'}</td>
-                  </tr>
+                  <FeedItem
+                    key={entry.id}
+                    name={entry.actor_name ?? 'system'}
+                    title={entry.action}
+                    when={<time dateTime={entry.created_at}>{time(entry.created_at)}</time>}
+                    detail={entry.target_name ?? '—'}
+                  />
                 ))}
-              </tbody>
-            </DataTable>
+              </FeedList>
+            )}
           </section>
         </>
       ) : null}
