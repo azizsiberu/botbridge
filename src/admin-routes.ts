@@ -29,6 +29,7 @@ import {
   setWebhook,
   updateBotById,
 } from './store.js';
+import { createApiKey, listApiKeys, revokeApiKey } from './registration.js';
 import {
   bindOAuthGrant,
   createInvite,
@@ -36,9 +37,11 @@ import {
   getSignupMode,
   listConnections,
   listPendingOAuthClients,
+  oauthSplitClients,
   reachableBots,
   revokeConnection,
   revokeOAuthGrant,
+  setOauthSplitClients,
   setSignupMode,
   suspendUser,
   syncAccount,
@@ -84,8 +87,31 @@ export function adminRouter(deps: Deps): Router {
       ...settingsPayload(deps.config),
       signupMode: await getSignupMode(deps.pool),
       isAdmin: account.isAdmin,
+      oauthSplitClients: await oauthSplitClients(deps.pool, account.id),
       allowlist: account.isAdmin ? settingsPayload(deps.config).allowlist : undefined,
     });
+  });
+
+  router.patch('/settings', async (req, res) => {
+    const body = objectBody(req);
+    if (typeof body.oauthSplitClients !== 'boolean') throw new UserError('oauthSplitClients must be true or false.');
+    await setOauthSplitClients(deps.pool, current(res).id, body.oauthSplitClients);
+    res.json({ oauthSplitClients: body.oauthSplitClients });
+  });
+
+  router.get('/api-keys', async (_req, res) => {
+    res.json({ keys: await listApiKeys(deps.pool, current(res).id) });
+  });
+
+  router.post('/api-keys', async (req, res) => {
+    const body = objectBody(req);
+    const created = await createApiKey(deps.pool, current(res).id, stringField(body, 'label'));
+    res.status(201).json(created);
+  });
+
+  router.post('/api-keys/:id/revoke', async (req, res) => {
+    await revokeApiKey(deps.pool, current(res).id, req.params.id);
+    res.json({ ok: true });
   });
 
   router.get('/bots', async (req, res) => {
@@ -106,7 +132,7 @@ export function adminRouter(deps: Deps): Router {
     res.status(201).json({
       bot: created.bot,
       token: created.token,
-      guide: connectGuide(deps.config.publicUrl, Boolean(deps.config.clerkPublishableKey), created.token),
+      guide: connectGuide(deps.config.publicUrl, Boolean(deps.config.clerkPublishableKey)),
     });
   });
 
@@ -150,7 +176,7 @@ export function adminRouter(deps: Deps): Router {
     const rotated = await rotateBotToken(deps.pool, req.params.id);
     res.json({
       token: rotated.token,
-      guide: connectGuide(deps.config.publicUrl, Boolean(deps.config.clerkPublishableKey), rotated.token),
+      guide: connectGuide(deps.config.publicUrl, Boolean(deps.config.clerkPublishableKey)),
     });
   });
 
@@ -206,7 +232,7 @@ export function adminRouter(deps: Deps): Router {
   router.get('/grants', async (_req, res) => {
     const account = current(res);
     const result = await deps.pool.query(
-      `SELECT g.id, g.clerk_client_id, g.label, g.created_at, g.revoked_at, b.id AS bot_id, b.name AS bot_name
+      `SELECT g.id, g.clerk_client_id, g.label, g.origin_name, g.created_at, g.revoked_at, b.id AS bot_id, b.name AS bot_name
        FROM oauth_grants g JOIN bots b ON b.id = g.bot_id
        WHERE g.user_id = $1
        ORDER BY g.created_at DESC`,
@@ -217,6 +243,7 @@ export function adminRouter(deps: Deps): Router {
         id: row.id,
         client_id: row.clerk_client_id,
         label: row.label,
+        origin_name: row.origin_name,
         created_at: row.created_at,
         revoked_at: row.revoked_at,
         bot: { id: row.bot_id, name: row.bot_name },
@@ -230,6 +257,7 @@ export function adminRouter(deps: Deps): Router {
       botId: stringField(body, 'bot_id'),
       clientId: stringField(body, 'client_id'),
       label: optionalString(body, 'label'),
+      grantId: optionalString(body, 'grant_id'),
     });
     res.status(201).json(created);
   });

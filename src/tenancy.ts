@@ -383,7 +383,7 @@ export async function listConnections(pool: Pool, userId: string) {
 export async function bindOAuthGrant(
   pool: Pool,
   userId: string,
-  input: { botId: string; clientId: string; label?: string | null },
+  input: { botId: string; clientId: string; label?: string | null; grantId?: string | null },
 ): Promise<{ id: string }> {
   const clientId = normalizeOAuthClientId(input.clientId);
   const bot = await pool.query<{ owner_user_id: string; revoked_at: Date | null }>(
@@ -392,17 +392,41 @@ export async function bindOAuthGrant(
   );
   const row = bot.rows[0];
   if (!row || row.revoked_at || row.owner_user_id !== userId) throw new UserError('Choose one of your active bots.');
-  await pool.query(
-    `UPDATE oauth_grants SET revoked_at = now()
-     WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
-    [userId, clientId],
-  );
+
+  let originName: string | null = null;
+  if (input.grantId) {
+    const prev = await pool.query<{ clerk_client_id: string; origin_name: string | null; bot_id: string }>(
+      `SELECT clerk_client_id, origin_name, bot_id FROM oauth_grants
+       WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+      [input.grantId, userId],
+    );
+    const current = prev.rows[0];
+    if (!current || current.clerk_client_id !== clientId) throw new UserError('That connection was not found.');
+    originName = current.origin_name;
+    await pool.query(`UPDATE oauth_grants SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, [input.grantId]);
+    await pool.query(
+      `UPDATE mcp_sessions SET bot_id = $4, last_seen_at = now()
+       WHERE user_id = $1 AND kind = 'oauth' AND oauth_client_id = $2 AND bot_id = $3`,
+      [userId, clientId, current.bot_id, input.botId],
+    );
+  } else {
+    await pool.query(
+      `UPDATE oauth_grants SET revoked_at = now()
+       WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
+      [userId, clientId],
+    );
+    await pool.query(
+      `UPDATE mcp_sessions SET bot_id = $3, last_seen_at = now()
+       WHERE user_id = $1 AND kind = 'oauth' AND oauth_client_id = $2`,
+      [userId, clientId, input.botId],
+    );
+  }
   const id = randomUUID();
   await pool.query(
-    `INSERT INTO oauth_grants (id, user_id, bot_id, clerk_client_id, label) VALUES ($1, $2, $3, $4, $5)`,
-    [id, userId, input.botId, clientId, input.label ?? null],
+    `INSERT INTO oauth_grants (id, user_id, bot_id, clerk_client_id, label, origin_name) VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, userId, input.botId, clientId, input.label ?? null, originName],
   );
-  await pool.query(`DELETE FROM oauth_pending_clients WHERE user_id = $1 AND clerk_client_id = $2`, [userId, clientId]);
+  await clearOAuthPending(pool, userId, clientId);
   return { id };
 }
 
@@ -410,66 +434,25 @@ export interface PendingOAuthClient {
   client_id: string;
   name: string;
   last_seen_at: string;
+  last_error: string | null;
 }
 
-/**
- * Resolve the bot for a verified OAuth token.
- * One active bot and no earlier grant: bind it and return the id.
- * Several bots, no bots, or a revoked grant: remember the client and return null.
- */
-export async function claimOAuthBot(pool: Pool, userId: string, rawClientId: string): Promise<string | null> {
-  const clientId = rawClientId.trim();
-  if (!clientId || clientId.length > OAUTH_CLIENT_ID_MAX) return null;
-
-  const active = await pool.query<{ bot_id: string }>(
-    `SELECT bot_id FROM oauth_grants
-     WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
-    [userId, clientId],
-  );
-  const bound = active.rows[0]?.bot_id;
-  if (bound) return bound;
-
-  const bots = await pool.query<{ id: string; name: string }>(
-    `SELECT id, name FROM bots
-     WHERE owner_user_id = $1 AND revoked_at IS NULL
-     ORDER BY created_at, id`,
+export async function oauthSplitClients(pool: Pool, userId: string): Promise<boolean> {
+  const result = await pool.query<{ oauth_split_clients: boolean }>(
+    `SELECT oauth_split_clients FROM users WHERE id = $1`,
     [userId],
   );
-  const only = bots.rows.length === 1 ? bots.rows[0] : undefined;
-  const prior = await pool.query(
-    `SELECT 1 FROM oauth_grants WHERE user_id = $1 AND clerk_client_id = $2 LIMIT 1`,
-    [userId, clientId],
-  );
-  if (only && (prior.rowCount ?? 0) === 0) {
-    try {
-      const label = oauthClientName(clientId);
-      const grant = await bindOAuthGrant(pool, userId, { botId: only.id, clientId, label });
-      await pool.query(
-        `INSERT INTO audit_log (actor_bot_id, action, target_bot_id, resource_type, resource_id, detail)
-         VALUES (NULL, 'oauth.grant.auto', $1, 'oauth_grant', $2, $3::jsonb)`,
-        [only.id, grant.id, JSON.stringify({ client_id: clientId, label, bot: only.name })],
-      );
-      return only.id;
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        const raced = await pool.query<{ bot_id: string }>(
-          `SELECT bot_id FROM oauth_grants
-           WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
-          [userId, clientId],
-        );
-        if (raced.rows[0]) return raced.rows[0].bot_id;
-      }
-      if (!(error instanceof UserError)) throw error;
-    }
-  }
+  return result.rows[0]?.oauth_split_clients === true;
+}
 
-  await rememberPendingClient(pool, userId, clientId);
-  return null;
+export async function setOauthSplitClients(pool: Pool, userId: string, enabled: boolean): Promise<void> {
+  const result = await pool.query(`UPDATE users SET oauth_split_clients = $2, updated_at = now() WHERE id = $1`, [userId, enabled]);
+  if ((result.rowCount ?? 0) !== 1) throw new UserError('Account not found.');
 }
 
 export async function listPendingOAuthClients(pool: Pool, userId: string): Promise<PendingOAuthClient[]> {
-  const result = await pool.query<{ clerk_client_id: string; last_seen_at: Date | string }>(
-    `SELECT p.clerk_client_id, p.last_seen_at
+  const result = await pool.query<{ clerk_client_id: string; last_seen_at: Date | string; last_error: string | null }>(
+    `SELECT p.clerk_client_id, p.last_seen_at, p.last_error
      FROM oauth_pending_clients p
      WHERE p.user_id = $1
        AND NOT EXISTS (
@@ -485,10 +468,11 @@ export async function listPendingOAuthClients(pool: Pool, userId: string): Promi
     client_id: row.clerk_client_id,
     name: oauthClientName(row.clerk_client_id),
     last_seen_at: row.last_seen_at instanceof Date ? row.last_seen_at.toISOString() : new Date(row.last_seen_at).toISOString(),
+    last_error: row.last_error,
   }));
 }
 
-function normalizeOAuthClientId(value: string): string {
+export function normalizeOAuthClientId(value: string): string {
   const clientId = value.trim();
   if (!clientId || clientId.length > OAUTH_CLIENT_ID_MAX) {
     throw new UserError(`client_id must be 1–${OAUTH_CLIENT_ID_MAX} characters.`);
@@ -496,13 +480,17 @@ function normalizeOAuthClientId(value: string): string {
   return clientId;
 }
 
-async function rememberPendingClient(pool: Pool, userId: string, clientId: string): Promise<void> {
+export async function clearOAuthPending(pool: Pool, userId: string, clientId: string): Promise<void> {
+  await pool.query(`DELETE FROM oauth_pending_clients WHERE user_id = $1 AND clerk_client_id = $2`, [userId, clientId]);
+}
+
+export async function noteOAuthPending(pool: Pool, userId: string, clientId: string, message: string): Promise<void> {
   await pool.query(
-    `INSERT INTO oauth_pending_clients (user_id, clerk_client_id, last_seen_at)
-     VALUES ($1, $2, now())
+    `INSERT INTO oauth_pending_clients (user_id, clerk_client_id, last_seen_at, last_error)
+     VALUES ($1, $2, now(), $3)
      ON CONFLICT (user_id, clerk_client_id)
-     DO UPDATE SET last_seen_at = now()`,
-    [userId, clientId],
+     DO UPDATE SET last_seen_at = now(), last_error = EXCLUDED.last_error`,
+    [userId, clientId, message.slice(0, 500)],
   );
 }
 

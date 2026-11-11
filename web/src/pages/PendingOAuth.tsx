@@ -33,13 +33,15 @@ export function PendingOAuthClients({
 
   return (
     <section className="section" role="status" style={presentation === 'banner' ? { marginTop: 0 } : undefined}>
-      <h2>Waiting for a bot</h2>
-      <DataTable label="OAuth clients waiting for a bot">
+      <h2>Registration needs attention</h2>
+      <p className="lede">These clients signed in and did not get a bot. Connect again, or bind the client to a bot you already have.</p>
+      <DataTable label="OAuth clients that did not register">
         <thead>
           <tr>
             <th>Client</th>
             <th>Client id</th>
             <th>Tried</th>
+            <th>What happened</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -49,8 +51,9 @@ export function PendingOAuthClients({
               <td>{client.name}</td>
               <td className="url">{client.client_id}</td>
               <td>{time(client.last_seen_at)}</td>
+              <td>{client.last_error ?? 'Connect the client again to register it.'}</td>
               <td>
-                <Button to={chooseBotPath(client.client_id)}>Choose bot</Button>
+                <Button to={bindPath(client.client_id)}>Bind to an existing bot</Button>
               </td>
             </tr>
           ))}
@@ -60,6 +63,6 @@ export function PendingOAuthClients({
   );
 }
 
-function chooseBotPath(clientId: string): string {
+function bindPath(clientId: string): string {
   return `/oauth/choose?${new URLSearchParams({ client_id: clientId }).toString()}`;
 }

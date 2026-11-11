@@ -8,6 +8,7 @@ import { clerkAppearance, ThemeButton, useTheme } from './theme';
 import { AuditPage } from './pages/Audit';
 import { BotPage } from './pages/Bot';
 import { BotsPage } from './pages/Bots';
+import { KeysPage } from './pages/Keys';
 import { DoorbellPage } from './pages/Doorbell';
 import { MailPage } from './pages/Mail';
 import { OverviewPage } from './pages/Overview';
@@ -121,6 +122,7 @@ function Desk({ version }: { version: string }) {
       <Routes>
         <Route path="/" element={<OverviewPage />} />
         <Route path="/bots" element={<BotsPage />} />
+        <Route path="/keys" element={<KeysPage />} />
         <Route path="/bots/:id" element={<BotPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/oauth/choose" element={<ChoosePage />} />

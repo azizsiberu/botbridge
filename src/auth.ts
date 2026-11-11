@@ -8,8 +8,10 @@ import { UserError } from './errors.js';
 import type { OAuthVerifier } from './identity.js';
 import type { Pool } from './db.js';
 import { TOKEN_LIFETIME_SECONDS } from './limits.js';
-import { accountIdForClerk, claimOAuthBot } from './tenancy.js';
-import { actorById, authenticateBot, type Actor } from './store.js';
+import { mcpRequestStore } from './mcp-request.js';
+import { connectContext, resolveApiKeyConnection, resolveOAuthConnection } from './registration.js';
+import { accountIdForClerk } from './tenancy.js';
+import { authenticateBot, type Actor } from './store.js';
 
 export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null, selectionUrl?: string | null): OAuthTokenVerifier {
   return {
@@ -19,48 +21,75 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
         if (!actor) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
         return botAuth(token, actor, 'token', Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SECONDS, ['bot']);
       }
-      if (!oauth) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
-      const profile = await oauth.verifyAccessToken(token);
-      if (!profile) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Clerk rejected this access token');
+      const ctx = currentConnectContext();
       try {
+        if (token.startsWith('bbk_')) {
+          const resolved = await resolveApiKeyConnection(pool, token, ctx);
+          return botAuth(
+            token,
+            resolved.actor,
+            'api_key',
+            Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SECONDS,
+            ['bot'],
+            resolved.sessionId,
+          );
+        }
+        if (!oauth) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown or revoked bot token');
+        const profile = await oauth.verifyAccessToken(token);
+        if (!profile) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Clerk rejected this access token');
         const accountId = await accountIdForClerk(pool, profile.userId, profile.email);
-        if (!accountId) {
-          throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
-        }
+        if (!accountId) throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
         const clientId = (profile.clientId || 'default').trim() || 'default';
-        const botId = await claimOAuthBot(pool, accountId, clientId);
-        if (!botId) {
-          const choose = selectionUrl ? `${selectionUrl}?client_id=${encodeURIComponent(clientId)}` : '/oauth/choose';
-          throw new UserError(`Choose which bot this connection uses: ${choose}`);
-        }
-        const actor = await actorById(pool, botId);
-        if (!actor || actor.ownerUserId !== accountId) {
-          throw new UserError('The bot bound to this connection is no longer available.');
-        }
+        const resolved = await resolveOAuthConnection(pool, accountId, clientId, ctx, selectionUrl ?? null);
+        const info = botAuth(
+          token,
+          resolved.actor,
+          'oauth',
+          profile.expiresAt,
+          profile.scopes.length > 0 ? profile.scopes : ['profile', 'email'],
+          resolved.sessionId,
+        );
         return {
-          ...botAuth(token, actor, 'oauth', profile.expiresAt, profile.scopes.length > 0 ? profile.scopes : ['profile', 'email']),
-          extra: {
-            ...botExtra(actor),
-            authMethod: 'oauth',
-            clerkUserId: profile.userId,
-          },
+          ...info,
+          extra: { ...info.extra, clerkUserId: profile.userId },
         };
       } catch (error) {
         if (error instanceof UserError) throw new OAuthError(OAuthErrorCode.InvalidToken, error.message);
+        if (error instanceof OAuthError) throw error;
         throw error;
       }
     },
   };
 }
 
-function botAuth(token: string, actor: Actor, method: 'token' | 'oauth', expiresAt: number, scopes: string[]): AuthInfo {
+function currentConnectContext() {
+  const req = mcpRequestStore.getStore();
+  return connectContext({
+    body: req?.body,
+    sessionHeader: req?.header('mcp-session-id') ?? null,
+    botHeader: req?.header('x-botbridge-bot') ?? null,
+  });
+}
+
+function botAuth(
+  token: string,
+  actor: Actor,
+  method: 'token' | 'oauth' | 'api_key',
+  expiresAt: number,
+  scopes: string[],
+  sessionId?: string | null,
+): AuthInfo {
   return {
     token,
     clientId: actor.id,
     scopes,
     // Static bot tokens do not expire until revoke. The SDK still requires expiresAt.
     expiresAt,
-    extra: { ...botExtra(actor), authMethod: method },
+    extra: {
+      ...botExtra(actor),
+      authMethod: method,
+      ...(sessionId ? { mcpSessionId: sessionId } : {}),
+    },
   };
 }
 

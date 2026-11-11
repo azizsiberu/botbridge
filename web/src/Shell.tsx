@@ -6,6 +6,7 @@ import { ThemeButton } from './theme';
 const links = [
   ['/', 'Overview'],
   ['/bots', 'Bots'],
+  ['/keys', 'API keys'],
   ['/connections', 'Connections'],
   ['/mail', 'Mail'],
   ['/tasks', 'Tasks'],

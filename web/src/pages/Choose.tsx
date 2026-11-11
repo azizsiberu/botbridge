@@ -10,6 +10,7 @@ export function ChoosePage() {
   const clientName = oauthClientName(clientId || 'default');
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [botId, setBotId] = useState('');
+  const grantId = params.get('grant_id') ?? '';
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -27,8 +28,8 @@ export function ChoosePage() {
   return (
     <div>
       <PageTitle
-        title={clientId ? `Choose a bot for ${clientName}` : 'Choose a bot'}
-        lede="This client will act as one of your bots until you revoke the grant. The choice is yours, not the client’s."
+        title={clientId ? `Bind ${clientName} to a bot` : 'Bind a connection'}
+        lede="A new client registers its own bot. Use this page when you want the connection to act as a bot you already have."
       />
       {error ? <div className="mb-4"><ErrorNote message={error} /></div> : null}
       {!bots && !error ? <Loading label="Loading your bots." /> : null}
@@ -46,7 +47,7 @@ export function ChoosePage() {
               className="stack"
               onSubmit={(event) => {
                 event.preventDefault();
-                api('/api/admin/grants', { method: 'POST', body: JSON.stringify({ bot_id: botId, client_id: clientId || 'default', label: clientName }) })
+                api('/api/admin/grants', { method: 'POST', body: JSON.stringify({ bot_id: botId, client_id: clientId || 'default', label: clientName, grant_id: grantId || undefined }) })
                   .then(() => setDone(true))
                   .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
               }}
@@ -72,7 +73,7 @@ export function ChoosePage() {
                   .then((created) =>
                     api('/api/admin/grants', {
                       method: 'POST',
-                      body: JSON.stringify({ bot_id: created.bot.id, client_id: clientId || 'default', label: clientName }),
+                      body: JSON.stringify({ bot_id: created.bot.id, client_id: clientId || 'default', label: clientName, grant_id: grantId || undefined }),
                     }),
                   )
                   .then(() => setDone(true))
