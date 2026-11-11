@@ -273,11 +273,21 @@ Claude's custom connector dialog can attach a remote MCP URL. Where the organiza
 
 Claude connects from Anthropic's network, so the server has to be reachable on the public internet, with a hostname that is in `ALLOWED_HOSTS`.
 
-### ChatGPT
+### ChatGPT and Cursor
 
-ChatGPT custom connectors authenticate with OAuth. They do not take a static bearer token. With Clerk configured, add a custom MCP server whose URL is `https://bridge.forget.it.com/mcp` and choose OAuth. ChatGPT discovers `/.well-known/oauth-protected-resource/mcp`, which points at your Clerk authorization server. After sign-in, open `/oauth/choose?client_id=…` (the error from an unbound client includes the link) and pick which of your bots that client acts as, or create one. The grant is stored on your account and can be revoked from the desk. It is not a one-user-one-bot mapping.
+ChatGPT custom connectors and Cursor authenticate with OAuth. With Clerk configured, add a custom MCP server whose URL is `https://bridge.forget.it.com/mcp` and choose OAuth. The client discovers `/.well-known/oauth-protected-resource/mcp`, which points at your Clerk authorization server.
 
-Static `bb_` tokens keep working for Claude Code, Cursor, Grok Bot, and OpenBot.
+Sign-in keeps Clerk's `redirect_url` when that URL is this site's origin or an `https` subdomain of the host in `BOTBRIDGE_PUBLIC_URL`. The browser then returns to Clerk's consent page. Any other `redirect_url` is dropped.
+
+The first verified token binds the client to a bot:
+
+- One active bot, and this client has never had a grant here: botbridge creates the grant and writes `oauth.grant.auto` to the audit log. The connection succeeds on that first call.
+- Several active bots, or none: `/mcp` returns `401 invalid_token`. The message includes `/oauth/choose?client_id=…`. Overview shows a banner and Connections lists the client, each with Choose bot. Pick an existing bot or create one.
+- A revoked grant stays revoked. The same banner appears until you choose a bot again.
+
+Cursor's client id is a Client ID Metadata Document URL, `https://cursor.com/oauth/mcp-client.json`. The chooser and the desk show the host (`cursor.com`). The grant stores the full URL.
+
+The grant lives on your account. One person can bind each client to a different bot. Static `bb_` tokens keep working for Claude Code, Cursor, Grok Bot, and OpenBot.
 
 ## Admin CLI
 
@@ -369,11 +379,11 @@ Clerk is the login for the desk and the authorization server for MCP OAuth. Stat
 Use the Clerk application you already have, or create one.
 
 1. **Domains.** For production, add `bridge.forget.it.com` and publish the DNS records Clerk shows. Use the live keys (`pk_live_…`, `sk_live_…`) after the domain is verified. Development keys (`pk_test_…`, `sk_test_…`) are enough for localhost.
-2. **Paths.** Set the sign-in path to `/sign-in` and the after-sign-in URL to `https://bridge.forget.it.com/`. Add that origin to the allowed redirect URLs.
+2. **Paths.** Set the sign-in path to `/sign-in` and the sign-up path to `/sign-up`. Add `https://bridge.forget.it.com` to the allowed redirect URLs. After a plain sign-in the desk opens `/`. During OAuth, Clerk passes `redirect_url`, and the desk follows it when the URL is this origin or an https subdomain of `BOTBRIDGE_PUBLIC_URL`.
 3. **Allowed origins.** Include `https://bridge.forget.it.com`.
 4. **MCP server.** Open Agents → MCP servers → Add MCP server. Set the MCP URL to `https://bridge.forget.it.com/mcp` with no query and no trailing slash. Allow public clients so Clerk turns on Client ID Metadata Documents. Adding the server also turns on the `aud` audience claim. The audience must be that exact MCP URL. botbridge checks it.
 5. **Scopes.** This server asks for `profile` and `email`. Set those as default scopes if a client does not request any.
-6. **Dynamic client registration.** ChatGPT can use CIMD or dynamic registration. If its connector fails before the Clerk sign-in screen, enable OAuth dynamic client registration for the instance (Configure → Developers, or the OAuth application settings Clerk shows next to the MCP server). Leave PKCE on.
+6. **Dynamic client registration.** ChatGPT and Cursor can use CIMD or dynamic registration. Cursor's client id is `https://cursor.com/oauth/mcp-client.json`. If a connector fails before the Clerk sign-in screen, enable OAuth dynamic client registration for the instance (Configure → Developers, or the OAuth application settings Clerk shows next to the MCP server). Leave PKCE on.
 7. **Who is an admin.** Put your email in `BOTBRIDGE_ADMIN_EMAILS`. A signed-in user who is not on the allowlist can load the sign-in page and then receives 403 from the API.
 
 botbridge does not store the Clerk secret in the database. It verifies session tokens for the desk and OAuth access tokens for `/mcp`.

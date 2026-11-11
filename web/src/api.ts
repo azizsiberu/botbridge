@@ -90,6 +90,12 @@ export interface Grant {
   bot: { id: string; name: string };
 }
 
+export interface PendingOAuthClient {
+  client_id: string;
+  name: string;
+  last_seen_at: string;
+}
+
 export interface Overview {
   bots: { active: number; revoked: number };
   messages: { total: number; unread: number; series: Array<{ day: string; count: number }> };

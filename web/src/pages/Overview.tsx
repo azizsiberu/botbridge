@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type Overview } from '../api';
 import { PageTitle } from '../Shell';
+import { PendingOAuthClients } from './PendingOAuth';
 import { Card, ErrorNote, Loading, Pill, Stat, time } from '../ui';
 
 export function OverviewPage() {
@@ -32,6 +33,7 @@ export function OverviewPage() {
           </div>
         }
       />
+      <PendingOAuthClients />
       {error ? <ErrorNote message={error} /> : null}
       {!data && !error ? <Loading label="Counting the mail…" /> : null}
       {data ? (

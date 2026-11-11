@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Sign-in keeps Clerk's `redirect_url` when it is this origin or an https subdomain of `BOTBRIDGE_PUBLIC_URL`, and returns there after sign-in.
+- An OAuth client whose account owns one active bot is bound on the first verified token (`oauth.grant.auto`). Accounts with several bots see the waiting client on Overview and Connections.
+
 ## 0.2.0
 
 - Admin dashboard at `/`: overview, bots, mail, tasks, audit, doorbell deliveries, and instance settings.

@@ -8,7 +8,7 @@ import { UserError } from './errors.js';
 import type { OAuthVerifier } from './identity.js';
 import type { Pool } from './db.js';
 import { TOKEN_LIFETIME_SECONDS } from './limits.js';
-import { accountIdForClerk } from './tenancy.js';
+import { accountIdForClerk, claimOAuthBot } from './tenancy.js';
 import { actorById, authenticateBot, type Actor } from './store.js';
 
 export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null, selectionUrl?: string | null): OAuthTokenVerifier {
@@ -27,13 +27,8 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
         if (!accountId) {
           throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
         }
-        const clientId = profile.clientId || 'default';
-        const grant = await pool.query<{ bot_id: string }>(
-          `SELECT bot_id FROM oauth_grants
-           WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
-          [accountId, clientId],
-        );
-        const botId = grant.rows[0]?.bot_id;
+        const clientId = (profile.clientId || 'default').trim() || 'default';
+        const botId = await claimOAuthBot(pool, accountId, clientId);
         if (!botId) {
           const choose = selectionUrl ? `${selectionUrl}?client_id=${encodeURIComponent(clientId)}` : '/oauth/choose';
           throw new UserError(`Choose which bot this connection uses: ${choose}`);

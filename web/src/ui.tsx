@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -39,25 +40,24 @@ export function Button({
   type = 'button',
   disabled,
   onClick,
+  to,
 }: {
   children: ReactNode;
   tone?: 'primary' | 'ghost' | 'danger';
   type?: 'button' | 'submit';
   disabled?: boolean;
   onClick?: () => void;
+  to?: string;
 }) {
   const tones = {
     primary: 'bg-[var(--accent)] text-[var(--accent-ink)] hover:brightness-105',
     ghost: 'border border-[var(--line)] bg-transparent hover:bg-[var(--bg-3)]',
     danger: 'border border-[color-mix(in_oklab,var(--danger)_45%,var(--line))] text-[var(--danger)]',
   };
+  const className = cx('inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold no-underline transition disabled:opacity-50', tones[tone]);
+  if (to) return <Link to={to} className={className}>{children}</Link>;
   return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={cx('rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-50', tones[tone])}
-    >
+    <button type={type} disabled={disabled} onClick={onClick} className={className}>
       {children}
     </button>
   );

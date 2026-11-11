@@ -3,7 +3,10 @@ import type { Config } from './config.js';
 import type { Pool } from './db.js';
 import { UserError, isUniqueViolation } from './errors.js';
 import type { AdminIdentity } from './identity.js';
+import { oauthClientName } from './oauth-client.js';
 import type { Actor } from './store.js';
+
+const OAUTH_CLIENT_ID_MAX = 2048;
 
 export const UNASSIGNED_USER_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -382,6 +385,7 @@ export async function bindOAuthGrant(
   userId: string,
   input: { botId: string; clientId: string; label?: string | null },
 ): Promise<{ id: string }> {
+  const clientId = normalizeOAuthClientId(input.clientId);
   const bot = await pool.query<{ owner_user_id: string; revoked_at: Date | null }>(
     `SELECT owner_user_id, revoked_at FROM bots WHERE id = $1`,
     [input.botId],
@@ -391,14 +395,115 @@ export async function bindOAuthGrant(
   await pool.query(
     `UPDATE oauth_grants SET revoked_at = now()
      WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
-    [userId, input.clientId],
+    [userId, clientId],
   );
   const id = randomUUID();
   await pool.query(
     `INSERT INTO oauth_grants (id, user_id, bot_id, clerk_client_id, label) VALUES ($1, $2, $3, $4, $5)`,
-    [id, userId, input.botId, input.clientId, input.label ?? null],
+    [id, userId, input.botId, clientId, input.label ?? null],
   );
+  await pool.query(`DELETE FROM oauth_pending_clients WHERE user_id = $1 AND clerk_client_id = $2`, [userId, clientId]);
   return { id };
+}
+
+export interface PendingOAuthClient {
+  client_id: string;
+  name: string;
+  last_seen_at: string;
+}
+
+/**
+ * Resolve the bot for a verified OAuth token.
+ * One active bot and no earlier grant: bind it and return the id.
+ * Several bots, no bots, or a revoked grant: remember the client and return null.
+ */
+export async function claimOAuthBot(pool: Pool, userId: string, rawClientId: string): Promise<string | null> {
+  const clientId = rawClientId.trim();
+  if (!clientId || clientId.length > OAUTH_CLIENT_ID_MAX) return null;
+
+  const active = await pool.query<{ bot_id: string }>(
+    `SELECT bot_id FROM oauth_grants
+     WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
+    [userId, clientId],
+  );
+  const bound = active.rows[0]?.bot_id;
+  if (bound) return bound;
+
+  const bots = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name FROM bots
+     WHERE owner_user_id = $1 AND revoked_at IS NULL
+     ORDER BY created_at, id`,
+    [userId],
+  );
+  const only = bots.rows.length === 1 ? bots.rows[0] : undefined;
+  const prior = await pool.query(
+    `SELECT 1 FROM oauth_grants WHERE user_id = $1 AND clerk_client_id = $2 LIMIT 1`,
+    [userId, clientId],
+  );
+  if (only && (prior.rowCount ?? 0) === 0) {
+    try {
+      const label = oauthClientName(clientId);
+      const grant = await bindOAuthGrant(pool, userId, { botId: only.id, clientId, label });
+      await pool.query(
+        `INSERT INTO audit_log (actor_bot_id, action, target_bot_id, resource_type, resource_id, detail)
+         VALUES (NULL, 'oauth.grant.auto', $1, 'oauth_grant', $2, $3::jsonb)`,
+        [only.id, grant.id, JSON.stringify({ client_id: clientId, label, bot: only.name })],
+      );
+      return only.id;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const raced = await pool.query<{ bot_id: string }>(
+          `SELECT bot_id FROM oauth_grants
+           WHERE user_id = $1 AND clerk_client_id = $2 AND revoked_at IS NULL`,
+          [userId, clientId],
+        );
+        if (raced.rows[0]) return raced.rows[0].bot_id;
+      }
+      if (!(error instanceof UserError)) throw error;
+    }
+  }
+
+  await rememberPendingClient(pool, userId, clientId);
+  return null;
+}
+
+export async function listPendingOAuthClients(pool: Pool, userId: string): Promise<PendingOAuthClient[]> {
+  const result = await pool.query<{ clerk_client_id: string; last_seen_at: Date | string }>(
+    `SELECT p.clerk_client_id, p.last_seen_at
+     FROM oauth_pending_clients p
+     WHERE p.user_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM oauth_grants g
+         WHERE g.user_id = p.user_id
+           AND g.clerk_client_id = p.clerk_client_id
+           AND g.revoked_at IS NULL
+       )
+     ORDER BY p.last_seen_at DESC, p.clerk_client_id`,
+    [userId],
+  );
+  return result.rows.map((row) => ({
+    client_id: row.clerk_client_id,
+    name: oauthClientName(row.clerk_client_id),
+    last_seen_at: row.last_seen_at instanceof Date ? row.last_seen_at.toISOString() : new Date(row.last_seen_at).toISOString(),
+  }));
+}
+
+function normalizeOAuthClientId(value: string): string {
+  const clientId = value.trim();
+  if (!clientId || clientId.length > OAUTH_CLIENT_ID_MAX) {
+    throw new UserError(`client_id must be 1–${OAUTH_CLIENT_ID_MAX} characters.`);
+  }
+  return clientId;
+}
+
+async function rememberPendingClient(pool: Pool, userId: string, clientId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO oauth_pending_clients (user_id, clerk_client_id, last_seen_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id, clerk_client_id)
+     DO UPDATE SET last_seen_at = now()`,
+    [userId, clientId],
+  );
 }
 
 export async function revokeOAuthGrant(pool: Pool, userId: string, grantId: string, isAdmin: boolean): Promise<void> {

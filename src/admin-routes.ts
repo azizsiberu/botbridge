@@ -35,6 +35,7 @@ import {
   decideConnection,
   getSignupMode,
   listConnections,
+  listPendingOAuthClients,
   reachableBots,
   revokeConnection,
   revokeOAuthGrant,
@@ -237,6 +238,10 @@ export function adminRouter(deps: Deps): Router {
     const account = current(res);
     await revokeOAuthGrant(deps.pool, account.id, req.params.id, account.isAdmin);
     res.json({ ok: true });
+  });
+
+  router.get('/oauth/pending', async (_req, res) => {
+    res.json({ clients: await listPendingOAuthClients(deps.pool, current(res).id) });
   });
 
   router.get('/messages', async (req, res) => {

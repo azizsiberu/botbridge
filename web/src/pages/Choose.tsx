@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { oauthClientName } from '../../../src/oauth-client';
 import { api, type Bot } from '../api';
 import { PageTitle } from '../Shell';
 import { Button, Card, ErrorNote, Field, Loading, control } from '../ui';
@@ -7,6 +8,7 @@ import { Button, Card, ErrorNote, Field, Loading, control } from '../ui';
 export function ChoosePage() {
   const [params] = useSearchParams();
   const clientId = params.get('client_id') ?? '';
+  const clientName = oauthClientName(clientId || 'default');
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [botId, setBotId] = useState('');
   const [name, setName] = useState('');
@@ -27,7 +29,7 @@ export function ChoosePage() {
     <div>
       <PageTitle
         kicker="OAuth"
-        title="Which bot is this?"
+        title={clientId ? `Which bot is ${clientName}?` : 'Which bot is this?'}
         lede="This client will act as one of your bots until you revoke the grant. The choice is yours, not the client’s."
       />
       {error ? <ErrorNote message={error} /> : null}
@@ -35,7 +37,7 @@ export function ChoosePage() {
       {done ? (
         <Card className="p-6">
           <p className="serif text-3xl">Bound.</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">Go back to the client and try again. You can revoke this from Settings.</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">{clientName} will use this bot. Go back to the client and try again.</p>
         </Card>
       ) : null}
       {bots && !done ? (
@@ -46,7 +48,7 @@ export function ChoosePage() {
               className="mt-4 grid gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                api('/api/admin/grants', { method: 'POST', body: JSON.stringify({ bot_id: botId, client_id: clientId || 'default', label: 'OAuth client' }) })
+                api('/api/admin/grants', { method: 'POST', body: JSON.stringify({ bot_id: botId, client_id: clientId || 'default', label: clientName }) })
                   .then(() => setDone(true))
                   .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
               }}
@@ -58,7 +60,7 @@ export function ChoosePage() {
                   ))}
                 </select>
               </Field>
-              <p className="text-xs text-[var(--muted)]">Client {clientId || 'default'}</p>
+              <ClientId clientId={clientId} clientName={clientName} />
               <Button type="submit" disabled={!botId}>Use this bot</Button>
             </form>
           </Card>
@@ -72,7 +74,7 @@ export function ChoosePage() {
                   .then((created) =>
                     api('/api/admin/grants', {
                       method: 'POST',
-                      body: JSON.stringify({ bot_id: created.bot.id, client_id: clientId || 'default', label: 'OAuth client' }),
+                      body: JSON.stringify({ bot_id: created.bot.id, client_id: clientId || 'default', label: clientName }),
                     }),
                   )
                   .then(() => setDone(true))
@@ -87,4 +89,16 @@ export function ChoosePage() {
       ) : null}
     </div>
   );
+}
+
+function ClientId({ clientId, clientName }: { clientId: string; clientName: string }) {
+  if (clientId && clientId !== clientName) {
+    return (
+      <p className="text-xs text-[var(--muted)]">
+        <span className="font-medium text-[var(--ink)]">{clientName}</span>
+        <span className="mt-1 block break-all">{clientId}</span>
+      </p>
+    );
+  }
+  return <p className="text-xs text-[var(--muted)]">Client {clientId || 'default'}</p>;
 }
