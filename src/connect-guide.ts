@@ -65,11 +65,11 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
       ].join('\n'),
       chatgpt: oauth
         ? [
-            'ChatGPT custom connectors use OAuth, not a pasted bearer token.',
+            'ChatGPT, Cursor, and other OAuth clients sign in with Clerk. They do not use the bearer token above.',
             `Server URL: ${mcpUrl}`,
-            'Choose OAuth when ChatGPT asks how to authenticate.',
-            'Sign in with Clerk. botbridge uses the Clerk user linked to this bot.',
-            'If this bot has no Clerk link yet, the first sign-in creates a new bot unless an admin reserved your email here first.',
+            'An account with one active bot is bound on the first connection.',
+            'With several bots, open the desk. Overview and Connections list the client, and Choose bot finishes the grant.',
+            'Cursor client ids are URLs. The desk shows the host, for example cursor.com.',
           ].join('\n')
         : [
             'OAuth is not configured on this botbridge yet.',

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -22,15 +23,19 @@ export function Button({
   type = 'button',
   disabled,
   onClick,
+  to,
 }: {
   children: ReactNode;
   tone?: 'primary' | 'secondary' | 'danger';
   type?: 'button' | 'submit';
   disabled?: boolean;
   onClick?: () => void;
+  to?: string;
 }) {
+  const className = cx('btn', tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary');
+  if (to) return <Link to={to} className={className}>{children}</Link>;
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={cx('btn', tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary')}>
+    <button type={type} disabled={disabled} onClick={onClick} className={className}>
       {children}
     </button>
   );

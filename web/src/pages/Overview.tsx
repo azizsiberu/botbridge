@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type Overview } from '../api';
 import { DataTable, ErrorNote, Loading, PageTitle, time } from '../ui';
+import { PendingOAuthClients } from './PendingOAuth';
 
 export function OverviewPage() {
   const [days, setDays] = useState<14 | 30>(14);
@@ -26,6 +27,7 @@ export function OverviewPage() {
           </div>
         }
       />
+      <PendingOAuthClients />
       {error ? <ErrorNote message={error} /> : null}
       {!data && !error ? <Loading label="Loading overview." /> : null}
       {data ? (

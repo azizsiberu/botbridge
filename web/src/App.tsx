@@ -1,6 +1,7 @@
 import { ClerkProvider, SignIn, SignUp, useAuth } from '@clerk/react';
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { allowedRedirectUrl, withRedirect, withoutRedirectParam } from '../../src/redirect';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
 import { Shell } from './Shell';
 import { clerkAppearance, ThemeButton, useTheme } from './theme';
@@ -39,21 +40,42 @@ export function App() {
   }
   return (
     <ClerkProvider publishableKey={config.clerkPublishableKey} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearance(theme)}>
-      <ClerkGate version={config.version} />
+      <ClerkGate version={config.version} publicUrl={config.publicUrl} />
     </ClerkProvider>
   );
 }
 
-function ClerkGate({ version }: { version: string }) {
+function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string | null }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const location = useLocation();
+  const rawRedirect = new URLSearchParams(location.search).get('redirect_url');
+  const redirectUrl = allowedRedirectUrl(rawRedirect, { pageOrigin: window.location.origin, publicUrl });
+  const signingUp = location.pathname === '/sign-up';
+  const onAuthScreen = location.pathname === '/sign-in' || signingUp;
+  const leaveForRedirect = Boolean(isSignedIn && onAuthScreen && redirectUrl);
+
   useEffect(() => {
     setTokenGetter(async () => (await getToken()) ?? null);
   }, [getToken]);
+
+  useEffect(() => {
+    if (leaveForRedirect && redirectUrl) window.location.replace(redirectUrl);
+  }, [leaveForRedirect, redirectUrl]);
+
   if (!isLoaded) return <Centered title="botbridge" body="Checking your Clerk session." />;
   if (!isSignedIn) {
-    const signingUp = location.pathname === '/sign-up';
-    if (location.pathname !== '/sign-in' && !signingUp) return <Navigate to="/sign-in" replace />;
+    if (onAuthScreen && rawRedirect && !redirectUrl) {
+      return <Navigate to={withoutRedirectParam(location.pathname, location.search)} replace />;
+    }
+    if (!onAuthScreen) return <Navigate to={withRedirect('/sign-in', redirectUrl)} replace />;
+    const afterAuth = redirectUrl ?? undefined;
+    const lede = signingUp
+      ? redirectUrl
+        ? 'Create an account. We will return you to the connection.'
+        : 'Create an account to manage your bots.'
+      : redirectUrl
+        ? 'Sign in. We will return you to the connection.'
+        : 'Sign in to manage your bots.';
     return (
       <div className="auth">
         <div className="auth-card">
@@ -61,13 +83,30 @@ function ClerkGate({ version }: { version: string }) {
             <p className="brand">botbridge</p>
             <ThemeButton />
           </div>
-          <p className="lede">{signingUp ? 'Create an account to manage your bots.' : 'Sign in to manage your bots.'}</p>
-          {signingUp ? <SignUp routing="hash" signInUrl="/sign-in" /> : <SignIn routing="hash" signUpUrl="/sign-up" />}
+          <p className="lede">{lede}</p>
+          {signingUp ? (
+            <SignUp
+              routing="hash"
+              signInUrl={withRedirect('/sign-in', redirectUrl)}
+              forceRedirectUrl={afterAuth}
+              fallbackRedirectUrl={afterAuth}
+            />
+          ) : (
+            <SignIn
+              routing="hash"
+              signUpUrl={withRedirect('/sign-up', redirectUrl)}
+              forceRedirectUrl={afterAuth}
+              fallbackRedirectUrl={afterAuth}
+            />
+          )}
         </div>
       </div>
     );
   }
-  if (location.pathname === '/sign-in' || location.pathname === '/sign-up') return <Navigate to="/" replace />;
+  if (onAuthScreen) {
+    if (redirectUrl) return <Centered title="botbridge" body="Sending you back to finish connecting." />;
+    return <Navigate to="/" replace />;
+  }
   return <Desk version={version} />;
 }
 

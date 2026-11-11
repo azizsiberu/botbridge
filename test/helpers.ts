@@ -12,7 +12,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 export async function resetDb(pool: Pool): Promise<void> {
-  await pool.query('TRUNCATE bots RESTART IDENTITY CASCADE');
+  await pool.query('TRUNCATE bots, oauth_pending_clients RESTART IDENTITY CASCADE');
 }
 
 export interface TestServer {

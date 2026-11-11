@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection } from '../api';
 import { Button, DataTable, Empty, ErrorNote, Loading, PageTitle, Status } from '../ui';
+import { PendingOAuthClients } from './PendingOAuth';
 
 export function ConnectionsPage() {
   const [rows, setRows] = useState<Connection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState<number | null>(null);
 
   function load() {
     api<{ connections: Connection[] }>('/api/admin/connections')
@@ -27,8 +29,9 @@ export function ConnectionsPage() {
         lede="Your own bots can already talk. A link to another account starts as a request. Nothing is shared until they approve, and either of you can revoke it."
       />
       {error ? <ErrorNote message={error} /> : null}
+      <PendingOAuthClients presentation="section" onLoaded={setWaiting} />
       {!rows && !error ? <Loading label="Loading connections." /> : null}
-      {rows && incoming.length === 0 && outgoing.length === 0 && active.length === 0 ? (
+      {rows && waiting === 0 && incoming.length === 0 && outgoing.length === 0 && active.length === 0 ? (
         <Empty title="No connections" body="Ask a bot to call request_connection, or wait for someone to invite this account. Approval stays here, with a person." />
       ) : null}
       <Section title="Waiting for you" rows={incoming} onDecide={load} />

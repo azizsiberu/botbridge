@@ -425,6 +425,25 @@ a.row-link:hover,
   color: var(--accent-ink);
 }
 
+a.btn {
+  text-decoration: none;
+}
+
+.main a.btn-primary,
+.main a.btn-primary:hover {
+  color: var(--accent-ink);
+}
+
+.main a.btn-secondary,
+.main a.btn-secondary:hover {
+  color: var(--ink);
+}
+
+.main a.btn-danger,
+.main a.btn-danger:hover {
+  color: var(--danger);
+}
+
 .btn-secondary {
   border-color: var(--control-line);
   background: var(--sheet);
