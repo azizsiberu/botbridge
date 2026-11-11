@@ -47,7 +47,7 @@ export function App() {
 }
 
 function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string | null }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
   const location = useLocation();
   const rawRedirect = new URLSearchParams(location.search).get('redirect_url');
   const redirectUrl = allowedRedirectUrl(rawRedirect, { pageOrigin: window.location.origin, publicUrl });
@@ -55,9 +55,12 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
   const onAuthScreen = location.pathname === '/sign-in' || signingUp;
   const leaveForRedirect = Boolean(isSignedIn && onAuthScreen && redirectUrl);
 
-  useEffect(() => {
-    setTokenGetter(async () => (await getToken()) ?? null);
-  }, [getToken]);
+  // Install before child effects. A getter that is still the default null
+  // function makes the first /api/admin/me call look like a signed-out user.
+  setTokenGetter(async (options) => {
+    if (!isSignedIn) return null;
+    return (await getToken(options?.skipCache ? { skipCache: true } : undefined)) ?? null;
+  });
 
   useEffect(() => {
     if (leaveForRedirect && redirectUrl) window.location.replace(redirectUrl);
@@ -108,7 +111,7 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
     if (redirectUrl) return <Centered title="botbridge" body="Sending you back to finish connecting." />;
     return <Navigate to="/" replace />;
   }
-  return <Desk version={version} />;
+  return <Desk version={version} onSignOut={() => signOut({ redirectUrl: `${window.location.origin}/sign-in` })} />;
 }
 
 function DevDesk({ version }: { version: string }) {
@@ -116,9 +119,9 @@ function DevDesk({ version }: { version: string }) {
   return <Desk version={version} />;
 }
 
-function Desk({ version }: { version: string }) {
+function Desk({ version, onSignOut }: { version: string; onSignOut?: () => void | Promise<void> }) {
   return (
-    <Shell version={version}>
+    <Shell version={version} onSignOut={onSignOut}>
       <Routes>
         <Route path="/" element={<OverviewPage />} />
         <Route path="/bots" element={<BotsPage />} />

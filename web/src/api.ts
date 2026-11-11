@@ -13,9 +13,9 @@ export class ApiError extends Error {
   }
 }
 
-let tokenGetter: () => Promise<string | null> = async () => null;
+let tokenGetter: (options?: { skipCache?: boolean }) => Promise<string | null> = async () => null;
 
-export function setTokenGetter(getter: () => Promise<string | null>): void {
+export function setTokenGetter(getter: (options?: { skipCache?: boolean }) => Promise<string | null>): void {
   tokenGetter = getter;
 }
 
@@ -25,8 +25,9 @@ export async function publicConfig(): Promise<PublicConfig> {
   return (await response.json()) as PublicConfig;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await tokenGetter();
+export async function api<T>(path: string, init: RequestInit = {}, auth: { skipCache?: boolean; requireToken?: boolean } = {}): Promise<T> {
+  const token = await tokenGetter(auth.skipCache ? { skipCache: true } : undefined);
+  if (auth.requireToken && !token) throw new ApiError(401, 'Clerk session token is not ready');
   const response = await fetch(path, {
     ...init,
     headers: {
