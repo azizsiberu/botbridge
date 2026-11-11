@@ -82,22 +82,36 @@ async function main(): Promise<void> {
     );
 
     await mkdir(out, { recursive: true });
+    await mkdir('/tmp/shots', { recursive: true });
     const base = `http://127.0.0.1:${running.port}`;
-    const pages: Array<[string, string, number, number]> = [
-      ['/', 'overview.png', 1440, 1100],
-      ['/connections', 'connections.png', 1440, 1000],
-      ['/bots', 'bots.png', 1440, 1100],
-      [`/bots/${ada.bot.id}`, 'bot.png', 1440, 1400],
-      ['/mail', 'mail.png', 1440, 1100],
-      [`/mail/${thread}`, 'thread.png', 1440, 1000],
-      ['/tasks', 'tasks.png', 1440, 1000],
-      ['/audit', 'audit.png', 1440, 1000],
-      ['/doorbell', 'doorbell.png', 1440, 900],
-      ['/settings', 'settings.png', 1440, 1100],
-      ['/', 'overview-mobile.png', 390, 900],
+    const pages: Array<[string, string, number]> = [
+      ['/', 'overview', 1100],
+      ['/connections', 'connections', 1000],
+      ['/bots', 'bots', 1100],
+      [`/bots/${ada.bot.id}`, 'bot', 1700],
+      ['/mail', 'mail', 1100],
+      [`/mail/${thread}`, 'thread', 1000],
+      ['/tasks', 'tasks', 1000],
+      ['/audit', 'audit', 1000],
+      ['/doorbell', 'doorbell', 900],
+      ['/settings', 'settings', 1100],
+      ['/admin', 'admin', 1100],
+      ['/oauth/choose?client_id=chatgpt', 'choose', 1000],
     ];
-    for (const [path, file, width, height] of pages) {
-      await shot(`${base}${path}`, new URL(file, out).pathname, width, height);
+    const only = process.env.SHOTS?.split(',').filter(Boolean);
+    for (const theme of ['dark', 'light'] as const) {
+      for (const [path, name, height] of pages) {
+        if (only && !only.includes(name)) continue;
+        const joiner = path.includes('?') ? '&' : '?';
+        const url = `${base}${path}${joiner}theme=${theme}`;
+        const file = theme === 'dark' ? `${name}.png` : `${name}-light.png`;
+        await shot(url, new URL(file, out).pathname, 1440, height);
+        await shot(url, `/tmp/shots/${name}-${theme}-390.png`, 390, 1200);
+      }
+    }
+    if (!only || only.includes('overview')) {
+      await shot(`${base}/?theme=dark`, new URL('overview-mobile.png', out).pathname, 390, 900);
+      await shot(`${base}/?theme=light`, new URL('overview-mobile-light.png', out).pathname, 390, 900);
     }
   } finally {
     await running.close();
@@ -116,22 +130,20 @@ function shot(url: string, file: string, width: number, height: number): Promise
         '--disable-dev-shm-usage',
         '--hide-scrollbars',
         '--no-first-run',
+        '--disable-extensions',
         `--user-data-dir=${profile}`,
         '--force-device-scale-factor=1',
         `--window-size=${width},${height}`,
-        '--virtual-time-budget=8000',
+        '--virtual-time-budget=3500',
         `--screenshot=${file}`,
         url,
       ],
-      { stdio: 'ignore', detached: true },
+      { stdio: 'ignore' },
     );
     const timer = setTimeout(() => {
-      try {
-        process.kill(-child.pid!, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    }, 12_000);
+      child.kill('SIGKILL');
+      resolve();
+    }, 8_000);
     child.on('exit', () => {
       clearTimeout(timer);
       resolve();

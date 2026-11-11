@@ -6,7 +6,8 @@
     <title>botbridge</title>
     <script>
       try {
-        const theme = localStorage.getItem('botbridge-theme');
+        const requested = new URLSearchParams(location.search).get('theme');
+        const theme = requested || localStorage.getItem('botbridge-theme');
         if (theme !== 'light') document.documentElement.classList.add('dark');
       } catch {}
     </script>

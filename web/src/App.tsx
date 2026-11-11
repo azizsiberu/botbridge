@@ -1,8 +1,9 @@
-import { ClerkProvider, SignIn, useAuth } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, useAuth } from '@clerk/react';
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
 import { Shell } from './Shell';
+import { clerkAppearance, ThemeButton, useTheme } from './theme';
 import { AuditPage } from './pages/Audit';
 import { BotPage } from './pages/Bot';
 import { BotsPage } from './pages/Bots';
@@ -19,26 +20,25 @@ import { AdminPage } from './pages/Admin';
 export function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [theme] = useTheme();
 
   useEffect(() => {
     publicConfig().then(setConfig).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to start'));
   }, []);
 
   if (error) return <Centered title="botbridge is not answering" body={error} />;
-  if (!config) return <Centered title="Opening the desk…" body="Loading the bridge." />;
-  if (config.devAuth) {
-    return <DevDesk version={config.version} />;
-  }
+  if (!config) return <Centered title="botbridge" body="Loading." />;
+  if (config.devAuth) return <DevDesk version={config.version} />;
   if (!config.clerkPublishableKey) {
     return (
       <Centered
         title="Clerk is not configured"
-        body="Set CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, BOTBRIDGE_PUBLIC_URL, and BOTBRIDGE_ADMIN_EMAILS, then rebuild is not required — restart the server."
+        body="Set CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, BOTBRIDGE_PUBLIC_URL, and BOTBRIDGE_ADMIN_EMAILS, then restart the server."
       />
     );
   }
   return (
-    <ClerkProvider publishableKey={config.clerkPublishableKey}>
+    <ClerkProvider publishableKey={config.clerkPublishableKey} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearance(theme)}>
       <ClerkGate version={config.version} />
     </ClerkProvider>
   );
@@ -50,19 +50,24 @@ function ClerkGate({ version }: { version: string }) {
   useEffect(() => {
     setTokenGetter(async () => (await getToken()) ?? null);
   }, [getToken]);
-  if (!isLoaded) return <Centered title="Opening the desk…" body="Checking your Clerk session." />;
+  if (!isLoaded) return <Centered title="botbridge" body="Checking your Clerk session." />;
   if (!isSignedIn) {
-    if (location.pathname !== '/sign-in') return <Navigate to="/sign-in" replace />;
+    const signingUp = location.pathname === '/sign-up';
+    if (location.pathname !== '/sign-in' && !signingUp) return <Navigate to="/sign-in" replace />;
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-10">
-        <div>
-          <p className="serif mb-6 text-center text-4xl italic">botbridge</p>
-          <SignIn routing="hash" />
+      <div className="auth">
+        <div className="auth-card">
+          <div className="auth-top">
+            <p className="brand">botbridge</p>
+            <ThemeButton />
+          </div>
+          <p className="lede">{signingUp ? 'Create an account to manage your bots.' : 'Sign in to manage your bots.'}</p>
+          {signingUp ? <SignUp routing="hash" signInUrl="/sign-in" /> : <SignIn routing="hash" signUpUrl="/sign-up" />}
         </div>
       </div>
     );
   }
-  if (location.pathname === '/sign-in') return <Navigate to="/" replace />;
+  if (location.pathname === '/sign-in' || location.pathname === '/sign-up') return <Navigate to="/" replace />;
   return <Desk version={version} />;
 }
 
@@ -95,10 +100,10 @@ function Desk({ version }: { version: string }) {
 
 function Centered({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="max-w-md text-center">
-        <p className="serif text-4xl italic">{title}</p>
-        <p className="mt-3 text-sm text-[var(--muted)]">{body}</p>
+    <div className="centered">
+      <div className="panel">
+        <h1>{title}</h1>
+        <p className="lede">{body}</p>
       </div>
     </div>
   );

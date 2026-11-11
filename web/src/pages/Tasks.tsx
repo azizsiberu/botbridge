@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Task } from '../api';
-import { PageTitle } from '../Shell';
-import { Card, Empty, ErrorNote, control, time } from '../ui';
+import { DataTable, Dialog, Empty, ErrorNote, PageTitle, Status, control, time } from '../ui';
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -15,46 +14,56 @@ export function TasksPage() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
   }, [q]);
 
-  const columns: Array<{ status: Task['status']; title: string }> = [
-    { status: 'open', title: 'Open' },
-    { status: 'completed', title: 'Completed' },
-  ];
-
   return (
     <div>
-      <PageTitle kicker="Work" title="Tasks" />
-      <input className={control} placeholder="Search instructions, results, or bots" value={q} onChange={(event) => setQ(event.target.value)} />
-      {error ? <div className="mt-4"><ErrorNote message={error} /></div> : null}
-      {tasks?.length === 0 ? <div className="mt-4"><Empty title="No tasks" body="When a bot posts work for another bot, it lands in the open column." /></div> : null}
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {columns.map((column) => (
-          <div key={column.status}>
-            <h2 className="mb-2 text-xs font-medium tracking-[0.16em] text-[var(--muted)] uppercase">{column.title}</h2>
-            <div className="grid gap-2">
-              {tasks?.filter((task) => task.status === column.status).map((task) => (
-                <button key={task.id} type="button" onClick={() => setOpen(task)} className="text-left">
-                  <Card className="px-4 py-3 hover:border-[var(--accent)]">
-                    <p className="text-sm font-medium">{task.from.name} → {task.to.name}</p>
-                    <p className="mt-1 line-clamp-3 text-sm text-[var(--muted)]">{task.instructions}</p>
-                  </Card>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+      <PageTitle title="Tasks" lede="Work one bot posted for another." />
+      <div className="filters">
+        <input className={control} aria-label="Search tasks" placeholder="Search instructions, results, or bots" value={q} onChange={(event) => setQ(event.target.value)} />
       </div>
-      {open ? (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={() => setOpen(null)}>
-          <Card className="max-h-[80vh] w-full max-w-xl overflow-auto p-5" >
-            <p className="text-xs tracking-[0.14em] text-[var(--muted)] uppercase">{open.status}</p>
-            <h2 className="serif text-3xl">{open.from.name} → {open.to.name}</h2>
-            <p className="mt-1 text-xs text-[var(--muted)]">{time(open.created_at)}</p>
-            <h3 className="mt-4 text-sm font-medium">Instructions</h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm">{open.instructions}</p>
-            <h3 className="mt-4 text-sm font-medium">Result</h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--muted)]">{open.result ?? 'Not finished.'}</p>
-          </Card>
+      {error ? <ErrorNote message={error} /> : null}
+      {tasks?.length === 0 ? <Empty title="No tasks" body="When a bot posts work for another bot, it is listed here." /> : null}
+      {tasks && tasks.length > 0 ? (
+        <div className="stack">
+          {(['open', 'completed'] as const).map((status) => {
+            const rows = tasks.filter((task) => task.status === status);
+            if (rows.length === 0) return null;
+            return (
+              <section key={status}>
+                <h2 className="mb-3">{status === 'open' ? 'Open' : 'Completed'}</h2>
+                <DataTable label={status === 'open' ? 'Open tasks' : 'Completed tasks'}>
+                  <thead>
+                    <tr><th>From</th><th>To</th><th>Status</th><th>When</th><th>Instructions</th></tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((task) => (
+                      <tr key={task.id}>
+                        <td>{task.from.name}</td>
+                        <td>{task.to.name}</td>
+                        <td><Status tone={task.status === 'open' ? 'warn' : 'ok'}>{task.status}</Status></td>
+                        <td>{time(task.created_at)}</td>
+                        <td>
+                          <button type="button" className="btn-link" onClick={() => setOpen(task)}>{task.instructions}</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </section>
+            );
+          })}
         </div>
+      ) : null}
+      {open ? (
+        <Dialog title="Task" onClose={() => setOpen(null)} wide>
+          <dl className="defs">
+            <dt>From</dt><dd>{open.from.name}</dd>
+            <dt>To</dt><dd>{open.to.name}</dd>
+            <dt>Status</dt><dd>{open.status}</dd>
+            <dt>Created</dt><dd>{time(open.created_at)}</dd>
+            <dt>Instructions</dt><dd className="whitespace-pre-wrap">{open.instructions}</dd>
+            <dt>Result</dt><dd className="whitespace-pre-wrap">{open.result ?? 'Not finished.'}</dd>
+          </dl>
+        </Dialog>
       ) : null}
     </div>
   );

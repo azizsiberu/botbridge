@@ -1,36 +1,19 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function PageTitle({ title, lede, action }: { title: string; lede?: ReactNode; action?: ReactNode }) {
   return (
-    <section className={cx('rise rounded-3xl border border-[var(--line)] bg-[var(--bg-2)] shadow-[var(--shadow)]', className)}>
-      {children}
-    </section>
+    <div className="page-head">
+      <div>
+        <h1>{title}</h1>
+        {lede ? <p className="lede">{lede}</p> : null}
+      </div>
+      {action ? <div className="actions">{action}</div> : null}
+    </div>
   );
-}
-
-export function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <Card className="p-5">
-      <p className="text-[11px] font-semibold tracking-[0.18em] text-[var(--muted)] uppercase">{label}</p>
-      <p className="serif mt-3 text-5xl leading-none">{value}</p>
-      {hint ? <p className="mt-3 text-sm text-[var(--muted)]">{hint}</p> : null}
-    </Card>
-  );
-}
-
-export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'ok' | 'warn' | 'danger' | 'accent' }) {
-  const tones = {
-    neutral: 'bg-[var(--bg-3)] text-[var(--ink)]',
-    ok: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-[var(--ok)]',
-    warn: 'bg-[color-mix(in_oklab,var(--warn)_18%,transparent)] text-[var(--warn)]',
-    danger: 'bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-[var(--danger)]',
-    accent: 'bg-[var(--chip)] text-[var(--ink)]',
-  };
-  return <span className={cx('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', tones[tone])}>{children}</span>;
 }
 
 export function Button({
@@ -41,23 +24,13 @@ export function Button({
   onClick,
 }: {
   children: ReactNode;
-  tone?: 'primary' | 'ghost' | 'danger';
+  tone?: 'primary' | 'secondary' | 'danger';
   type?: 'button' | 'submit';
   disabled?: boolean;
   onClick?: () => void;
 }) {
-  const tones = {
-    primary: 'bg-[var(--accent)] text-[var(--accent-ink)] hover:brightness-105',
-    ghost: 'border border-[var(--line)] bg-transparent hover:bg-[var(--bg-3)]',
-    danger: 'border border-[color-mix(in_oklab,var(--danger)_45%,var(--line))] text-[var(--danger)]',
-  };
   return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={cx('rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-50', tones[tone])}
-    >
+    <button type={type} disabled={disabled} onClick={onClick} className={cx('btn', tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary')}>
       {children}
     </button>
   );
@@ -65,21 +38,24 @@ export function Button({
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="block text-sm">
-      <span className="mb-2 block font-medium text-[var(--muted)]">{label}</span>
+    <label className="field">
+      <span>{label}</span>
       {children}
     </label>
   );
 }
 
-export const control =
-  'w-full rounded-2xl border border-[var(--line)] bg-[var(--bg)] px-3 py-2.5 text-sm outline-none';
+export const control = 'control';
+
+export function Status({ tone, children }: { tone: 'ok' | 'warn' | 'danger' | 'neutral'; children: ReactNode }) {
+  return <span className={cx('status', `status-${tone}`)}>{children}</span>;
+}
 
 export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
-      tone="ghost"
+      tone="secondary"
       onClick={() => {
         void navigator.clipboard.writeText(value).then(() => {
           setCopied(true);
@@ -87,36 +63,55 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
         });
       }}
     >
-      {copied ? 'Copied' : label}
+      <span aria-live="polite">{copied ? 'Copied' : label}</span>
     </Button>
   );
 }
 
 export function Empty({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
-    <div className="rounded-3xl border border-dashed border-[var(--line)] px-6 py-14 text-center">
-      <p className="serif text-3xl">{title}</p>
-      <p className="mx-auto mt-3 max-w-md text-sm text-[var(--muted)]">{body}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+    <div className="empty">
+      <h2>{title}</h2>
+      <p>{body}</p>
+      {action ? <div className="actions">{action}</div> : null}
     </div>
   );
 }
 
 export function Loading({ label }: { label: string }) {
+  return <p className="loading" aria-busy="true" aria-live="polite">{label}</p>;
+}
+
+export function ErrorNote({ message }: { message: string }) {
+  return <p role="alert" className="error">{message}</p>;
+}
+
+export function DataTable({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-3" aria-busy="true" aria-live="polite">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
-      <div className="h-24 animate-pulse rounded-3xl bg-[var(--bg-3)]" />
-      <div className="h-24 animate-pulse rounded-3xl bg-[var(--bg-3)]" />
+    <div className="table-wrap">
+      <table className="data" aria-label={label}>{children}</table>
     </div>
   );
 }
 
-export function ErrorNote({ message }: { message: string }) {
+export function Dialog({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
-    <p role="alert" className="rounded-2xl bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">
-      {message}
-    </p>
+    <div className="dialog-back" onClick={onClose}>
+      <div className={cx('dialog', wide && 'wide')} role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={(event) => event.stopPropagation()}>
+        <div className="dialog-head">
+          <h2 id="dialog-title">{title}</h2>
+          <Button tone="secondary" onClick={onClose}>Close</Button>
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }
 
