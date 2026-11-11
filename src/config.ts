@@ -21,7 +21,44 @@ export interface Config {
   /** Email that should own bots created before accounts existed. */
   legacyOwnerEmail: string | null;
   signupMode: 'open' | 'invite';
+  files: FileConfig;
+  /** Mention doorbells one bot may receive per room (or DM sender) per minute. Extra mentions are stored but do not ring. */
+  mentionDoorbellsPerMinute: number;
 }
+
+export interface S3Config {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  forcePathStyle: boolean;
+  prefix: string;
+}
+
+export interface FileConfig {
+  storage: 'db' | 's3';
+  maxBytes: number;
+  /** Lowercase MIME types; `type/*` matches a whole family. */
+  allowedTypes: string[];
+  urlTtlSeconds: number;
+  s3: S3Config | null;
+}
+
+export const DEFAULT_FILE_TYPES = [
+  'image/*',
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+  'application/json',
+  'application/pdf',
+  'application/zip',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/msword',
+];
 
 const PLACEHOLDER_SECRETS = new Set([
   'change-me',
@@ -103,7 +140,58 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dashboardDevAuth,
     legacyOwnerEmail: env.BOTBRIDGE_LEGACY_OWNER_EMAIL?.trim().toLowerCase() || null,
     signupMode: env.BOTBRIDGE_SIGNUP_MODE === 'invite' ? 'invite' : 'open',
+    files: loadFileConfig(env),
+    mentionDoorbellsPerMinute: intEnv(env, 'BOTBRIDGE_MENTION_DOORBELLS_PER_MINUTE', 6, 1, 1_000),
   };
+}
+
+function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
+  const raw = env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}`);
+  }
+  return value;
+}
+
+function loadFileConfig(env: NodeJS.ProcessEnv): FileConfig {
+  const storageRaw = env.BOTBRIDGE_STORAGE?.trim().toLowerCase() || 'db';
+  if (storageRaw !== 'db' && storageRaw !== 's3') {
+    throw new Error('BOTBRIDGE_STORAGE must be db or s3');
+  }
+  const maxBytes = intEnv(env, 'BOTBRIDGE_FILE_MAX_BYTES', 5 * 1024 * 1024, 1, 100 * 1024 * 1024);
+  const urlTtlSeconds = intEnv(env, 'BOTBRIDGE_FILE_URL_TTL_SECONDS', 300, 30, 3_600);
+  const typesRaw = splitList(env.BOTBRIDGE_FILE_ALLOWED_TYPES).map((type) => type.toLowerCase());
+  const allowedTypes = typesRaw.length > 0 ? typesRaw : DEFAULT_FILE_TYPES;
+  for (const type of allowedTypes) {
+    if (type !== '*/*' && !/^[a-z0-9][a-z0-9!#$&^_.+-]*\/(\*|[a-z0-9][a-z0-9!#$&^_.+-]*)$/.test(type)) {
+      throw new Error(`BOTBRIDGE_FILE_ALLOWED_TYPES has an invalid MIME type: ${type}`);
+    }
+  }
+  let s3: S3Config | null = null;
+  if (storageRaw === 's3') {
+    const endpoint = required(env, 'BOTBRIDGE_S3_ENDPOINT').replace(/\/+$/, '');
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      throw new Error('BOTBRIDGE_S3_ENDPOINT must be an absolute URL, for example https://<account>.r2.cloudflarestorage.com');
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error('BOTBRIDGE_S3_ENDPOINT must use https (or http for a local test server).');
+    }
+    s3 = {
+      endpoint,
+      region: env.BOTBRIDGE_S3_REGION?.trim() || 'auto',
+      bucket: required(env, 'BOTBRIDGE_S3_BUCKET'),
+      accessKeyId: required(env, 'BOTBRIDGE_S3_ACCESS_KEY_ID'),
+      secretAccessKey: required(env, 'BOTBRIDGE_S3_SECRET_ACCESS_KEY'),
+      forcePathStyle: env.BOTBRIDGE_S3_FORCE_PATH_STYLE?.trim() !== '0',
+      prefix: (env.BOTBRIDGE_S3_PREFIX?.trim() ?? 'botbridge/').replace(/^\/+/, ''),
+    };
+  }
+  return { storage: storageRaw, maxBytes, allowedTypes, urlTtlSeconds, s3 };
 }
 
 function splitList(value: string | undefined): string[] {

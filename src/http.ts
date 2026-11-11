@@ -14,6 +14,9 @@ import { mcpRequestStore } from './mcp-request.js';
 import { createBotbridgeHandler } from './mcp.js';
 import { createAdminAuth, createClerkDirectory, createOAuthVerifier, type AdminAuth, type ClerkDirectory, type OAuthVerifier } from './identity.js';
 import { consumeRate } from './store.js';
+import { fileForLink, verifyLocalDownload } from './files.js';
+import { contentDisposition, createStorage, type FileStorage } from './storage.js';
+import { isUuid } from './text.js';
 import { VERSION } from './version.js';
 
 export interface AppDeps {
@@ -22,6 +25,12 @@ export interface AppDeps {
   adminAuth?: AdminAuth;
   oauth?: OAuthVerifier | null;
   directory?: ClerkDirectory | null;
+  storage?: FileStorage;
+}
+
+/** JSON body limit: 1 MB, or enough for one base64 upload_file call at the configured file size cap. */
+export function jsonLimitBytes(maxFileBytes: number): number {
+  return Math.max(1024 * 1024, Math.ceil(maxFileBytes / 3) * 4 + 256 * 1024);
 }
 
 export function webDistDir(): string {
@@ -44,11 +53,12 @@ export function createApp(deps: AppDeps) {
   const oauth = deps.oauth === undefined ? createOAuthVerifier(config) : deps.oauth;
   const adminAuth = deps.adminAuth ?? createAdminAuth(config);
   const directory = deps.directory === undefined ? createClerkDirectory(config) : deps.directory;
+  const storage = deps.storage ?? createStorage(pool, config.files);
   const app = createMcpExpressApp({
     host: config.host,
     allowedHosts: config.allowedHosts,
     allowedOrigins: config.allowedHosts,
-    jsonLimit: '1mb',
+    jsonLimit: `${jsonLimitBytes(config.files.maxBytes)}b`,
   });
 
   app.get('/health', async (_req: Request, res: Response) => {
@@ -72,6 +82,37 @@ export function createApp(deps: AppDeps) {
 
   mountOAuthMetadata(app, config);
 
+  // Signed, short-lived download links for the db storage backend. get_file issues them per bot and file.
+  app.get('/files/:id', async (req: Request, res: Response) => {
+    const fileId = String(req.params.id ?? '');
+    const botId = typeof req.query.b === 'string' ? req.query.b : '';
+    const exp = typeof req.query.exp === 'string' ? req.query.exp : '';
+    const sig = typeof req.query.sig === 'string' ? req.query.sig : '';
+    res.set('Cache-Control', 'private, no-store');
+    if (!isUuid(fileId) || !isUuid(botId) || !verifyLocalDownload(config, { fileId, botId, exp, sig })) {
+      res.status(403).json({ error: 'invalid_or_expired_link' });
+      return;
+    }
+    try {
+      const found = await fileForLink({ pool, config, storage }, fileId.toLowerCase(), botId.toLowerCase());
+      if (!found) {
+        res.status(404).json({ error: 'not_found' });
+        return;
+      }
+      res.set({
+        'Content-Type': found.row.mime_type,
+        'Content-Length': String(found.data.length),
+        'Content-Disposition': contentDisposition(found.row.filename),
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+      });
+      res.status(200).end(found.data);
+    } catch (error) {
+      log('error', 'file download failed', { error: error instanceof Error ? error.message : 'unknown' });
+      if (!res.headersSent) res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
   app.use('/api/admin', adminRouter({ pool, config, adminAuth, directory }));
   app.use('/api', (error: unknown, _req: Request, res: Response, next: (error?: unknown) => void) => {
     if (res.headersSent) {
@@ -82,7 +123,7 @@ export function createApp(deps: AppDeps) {
     res.status(500).json({ error: 'internal_error' });
   });
 
-  const handler = createBotbridgeHandler({ pool, config });
+  const handler = createBotbridgeHandler({ pool, config, storage });
   const nodeHandler = toNodeHandler(handler, {
     onerror: (error) => log('error', 'mcp handler failed', { error: error.message }),
   });
@@ -130,7 +171,7 @@ export function createApp(deps: AppDeps) {
         next();
         return;
       }
-      if (req.path.startsWith('/api') || req.path.startsWith('/mcp') || req.path === '/health' || req.path.startsWith('/.well-known')) {
+      if (req.path.startsWith('/api') || req.path.startsWith('/mcp') || req.path.startsWith('/files/') || req.path === '/health' || req.path.startsWith('/.well-known')) {
         next();
         return;
       }

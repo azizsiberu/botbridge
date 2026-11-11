@@ -6,13 +6,26 @@ import type { WebhookProfile } from './text.js';
 
 export interface DoorbellNotice {
   id: string;
-  type: 'message.created' | 'broadcast.created' | 'task.created' | 'task.completed' | 'doorbell.test';
+  type:
+    | 'message.created'
+    | 'broadcast.created'
+    | 'task.created'
+    | 'task.completed'
+    | 'room.mention'
+    | 'room.invited'
+    | 'doorbell.test';
   occurred_at: string;
   bot: { id: string; name: string };
   from: { id: string; name: string };
-  resource: { type: 'message' | 'task' | 'doorbell'; id: string };
+  resource: { type: 'message' | 'task' | 'doorbell' | 'room_post' | 'room'; id: string };
   thread_id: string | null;
   preview: string;
+  /** Set on room events. Read the post with read_room. */
+  room?: { id: string; name: string };
+  /** True when the recipient was @mentioned in this message or post. */
+  mentioned?: boolean;
+  /** How many files are attached. Fetch them with get_file. */
+  attachments?: number;
 }
 
 const BACKOFF_MS = [1_000, 5_000, 30_000, 120_000, 600_000];
