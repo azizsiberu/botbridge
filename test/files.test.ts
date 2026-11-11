@@ -222,7 +222,7 @@ describe('file attachments on S3-compatible storage', () => {
     const s3 = { endpoint, region: 'auto', bucket: 'bridge', accessKeyId: 'id', secretAccessKey: 'secret', forcePathStyle: true, prefix: 'bb/' };
     app = await listenForTests(
       { files: { ...testConfig().files, storage: 's3', maxBytes: 32, s3 } },
-      { storage: new S3Storage(s3) },
+      { storage: new S3Storage(s3), adminAuth: { async verifySession(token) { return token === 'workspace-test' ? { userId: 's3_user',email:'s3@example.com',orgRoles:[] } : null; } } },
     );
   });
 
@@ -237,6 +237,25 @@ describe('file attachments on S3-compatible storage', () => {
     await app.close();
   });
 
+  it('completes a browser workspace upload and issues an authorized download', async () => {
+    async function call<T>(path: string, body?: unknown) {
+      const response = await fetch(app.baseUrl + path, {
+        method: body ? 'POST' : 'GET',
+        headers: { authorization: 'Bearer workspace-test', 'content-type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      expect(response.ok, await response.clone().text()).toBe(true);
+      return (await response.json()) as T;
+    }
+    const { bot } = await call<{bot:{id:string}}>('/api/admin/bots', { name: 'file-agent' });
+    const root = '/api/workspace/bots/' + bot.id;
+    expect((await call<{direct:boolean}>(root + '/uploads')).direct).toBe(true);
+    const { file, upload } = await call<{file:{id:string};upload:{url:string;headers:Record<string,string>}}>(root + '/uploads', { filename: 'note.txt', mimeType: 'text/plain', size: 5 });
+    expect((await fetch(upload.url, { method: 'PUT', headers: upload.headers, body: 'hello' })).ok).toBe(true);
+    expect((await call<{status:string}>(root + '/uploads/' + file.id + '/complete', {})).status).toBe('ready');
+    const { url } = await call<{url:string}>(root + '/files/' + file.id);
+    expect(await (await fetch(url)).text()).toBe('hello');
+  });
   it('uploads through a presigned URL, completes, and downloads through a presigned URL', async () => {
     const ajeg = await issueBot(app.pool, 'ajeg');
     const aziz = await issueBot(app.pool, 'aziz');

@@ -432,7 +432,7 @@ function assertAdmin(account: Account): void {
   if (!account.isAdmin) throw new UserError('Instance admins only.');
 }
 
-async function guard(deps: Deps, req: Request, res: Response): Promise<Account | null> {
+export async function guard(deps: Deps, req: Request, res: Response): Promise<Account | null> {
   const header = req.header('authorization') ?? '';
   const token = /^bearer\s+/i.test(header) ? header.replace(/^bearer\s+/i, '').trim() : '';
   if (!token) {

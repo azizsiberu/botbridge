@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { api, type MailMessage } from '../api';
-import { DataTable, Empty, ErrorNote, PageTitle, Status, control, time } from '../ui';
+import { Avatar } from '../social';
+import { Empty, ErrorNote, Loading, PageTitle, Status, control, time } from '../ui';
 
 export function MailPage() {
+  const [params] = useSearchParams();
   const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [to, setTo] = useState(params.get('bot') ?? '');
   const [q, setQ] = useState('');
   const [unread, setUnread] = useState(false);
   const [messages, setMessages] = useState<MailMessage[] | null>(null);
@@ -13,6 +15,9 @@ export function MailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    setError(null);
+    setMessages(null);
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
@@ -20,15 +25,17 @@ export function MailPage() {
     if (unread) params.set('unread', '1');
     api<{ messages: MailMessage[]; total: number }>(`/api/admin/messages?${params}`)
       .then((body) => {
+        if (!active) return;
         setMessages(body.messages);
         setTotal(body.total);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
+      .catch((err: unknown) => { if (active) setError(err instanceof Error ? err.message : 'Failed'); });
+    return () => { active = false; };
   }, [from, to, q, unread]);
 
   return (
     <div>
-      <PageTitle title="Mail" lede="Messages between bots, including broadcasts." />
+      <PageTitle title="Inbox" lede="Private conversations between your bots." />
       <div className="filters cols-4">
         <input className={control} aria-label="From" placeholder="From" value={from} onChange={(event) => setFrom(event.target.value)} />
         <input className={control} aria-label="To" placeholder="To" value={to} onChange={(event) => setTo(event.target.value)} />
@@ -37,27 +44,19 @@ export function MailPage() {
           <input type="checkbox" checked={unread} onChange={(event) => setUnread(event.target.checked)} /> Unread only
         </label>
       </div>
+      {!messages && !error ? <Loading label="Loading conversations." /> : null}
       {messages ? <p className="muted mb-3">{total} matching</p> : null}
       {error ? <ErrorNote message={error} /> : null}
       {messages?.length === 0 ? <Empty title="No messages" body="Messages between bots show up here, including broadcasts." /> : null}
       {messages && messages.length > 0 ? (
-        <DataTable label="Mail">
-          <thead>
-            <tr><th>From</th><th>To</th><th>Kind</th><th>Status</th><th>When</th><th>Text</th></tr>
-          </thead>
-          <tbody>
-            {messages.map((message) => (
-              <tr key={message.id}>
-                <td><Link className="row-link" to={`/mail/${message.thread_id}`}>{message.from.name}</Link></td>
-                <td>{message.to.name}</td>
-                <td>{message.kind}</td>
-                <td>{message.read_at ? <Status tone="neutral">Read</Status> : <Status tone="warn">Unread</Status>}</td>
-                <td>{time(message.created_at)}</td>
-                <td className="clip">{message.text}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <div className="inbox-list" aria-label="Conversations">
+          {messages.map(message => <Link className="inbox-row" key={message.id} to={`/mail/${message.thread_id}`}>
+            <Avatar name={message.from.name} />
+            <div className="post-content"><div className="post-byline"><strong>{message.from.name}</strong><time dateTime={message.created_at}>{time(message.created_at)}</time></div>
+              <p>{message.text}</p><div className="inbox-meta"><span>To {message.to.name}</span><span>{message.kind}</span><Status tone={message.read_at ? 'neutral' : 'warn'}>{message.read_at ? 'Read' : 'Unread'}</Status></div>
+            </div>
+          </Link>)}
+        </div>
       ) : null}
     </div>
   );

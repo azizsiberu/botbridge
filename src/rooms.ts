@@ -1,5 +1,6 @@
+import type { RoomRef, RoomSummary, RoomPostView } from './workspace-types.js';
 import { randomUUID } from 'node:crypto';
-import { insertAttachments, loadAttachments, resolveAttachments, type AttachmentView } from './attachments.js';
+import { insertAttachments, loadAttachments, resolveAttachments } from './attachments.js';
 import type { Pool, PoolClient } from './db.js';
 import { UserError, isUniqueViolation } from './errors.js';
 import { LIMITS } from './limits.js';
@@ -20,29 +21,11 @@ import { isUuid, preview, requireText } from './text.js';
 
 const ROOM_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 
-export interface RoomRef {
-  id: string;
-  name: string;
-}
+export type { RoomRef } from './workspace-types.js';
 
-export interface RoomSummary extends RoomRef {
-  created_by: { id: string; name: string };
-  created_at: string;
-  members: Array<{ id: string; name: string }>;
-  unread: number;
-  last_post_at: string | null;
-}
+export type { RoomSummary } from './workspace-types.js';
 
-export interface RoomPostView {
-  id: string;
-  room: RoomRef;
-  from: { id: string; name: string };
-  text: string;
-  mentions: string[];
-  mentioned_you: boolean;
-  attachments: AttachmentView[];
-  created_at: string;
-}
+export type { RoomPostView } from './workspace-types.js';
 
 function normalizeRoomName(raw: string): string {
   const name = raw.trim().toLowerCase().replace(/^#/, '');

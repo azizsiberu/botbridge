@@ -1,0 +1,352 @@
+.ws-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 760px);
+  gap: 16px;
+  max-width: 1920px;
+  margin: auto;
+  padding: 0 20px;
+  height: 100dvh;
+}
+.ws-nav,
+.ws-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-nav {
+  overflow: auto;
+  padding: 16px 12px 24px 0;
+  gap: 16px;
+}
+.ws-brand {
+  font-weight: 650;
+  font-size: 24px;
+  letter-spacing: -1px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.ws-nav nav,
+.ws-mobile-menu {
+  display: grid;
+  gap: 4px;
+}
+.ws-nav nav a,
+.ws-mobile-menu a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 12px;
+}
+.ws-nav nav a[aria-current='page'],
+.ws-mobile-menu a[aria-current='page'] {
+  background: var(--line);
+}
+.ws-nav details,
+.ws-mobile-menu details {
+  margin-top: 12px;
+  color: var(--muted);
+}
+.ws-layout summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.ws-selector {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ws-selector select,
+.compose-options button {
+  background: var(--sheet);
+  color: var(--ink);
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  max-width: 100%;
+}
+.ws-column > header,
+.compose-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 68px;
+  padding: 0 16px;
+}
+.ws-column header :is(h1, h2),
+.ws-notice h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+.ws-column header :is(a, button),
+.compose-dialog header button {
+  font-size: 13px;
+  color: var(--muted);
+}
+.ws-surface {
+  border: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  overflow: auto;
+  flex: 1;
+  background: var(--field);
+  overscroll-behavior: contain;
+}
+.ws-surface > .ws-selector {
+  margin: 20px;
+}
+.ws-row,
+.ws-prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  color: var(--ink);
+}
+.ws-row > div {
+  min-width: 0;
+}
+.ws-row strong {
+  font-size: 14px;
+}
+.ws-row time {
+  font-size: 12px;
+  color: var(--muted);
+  display: block;
+  margin-top: 3px;
+}
+.ws-row p,
+.ws-profile p,
+.ws-notice p {
+  color: var(--muted);
+  margin: 6px 0;
+}
+.ws-row .ws-body,
+.ws-body {
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ws-prompt {
+  align-items: center;
+}
+.ws-prompt > button:first-of-type {
+  text-align: left;
+  color: var(--muted);
+  flex: 1;
+}
+.ws-compose {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  color: var(--field);
+  padding: 8px 13px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+.ws-layout button {
+  cursor: pointer;
+}
+.ws-layout button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ws-notice,
+.ws-profile,
+.ws-tools,
+.ws-surface > .loading {
+  padding: 20px;
+}
+.ws-notice,
+.ws-tools,
+.ws-profile {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.ws-tools {
+  border-bottom: 1px solid var(--line);
+}
+.ws-tools > * {
+  max-width: 100%;
+}
+.ws-profile h2 {
+  font-size: 24px;
+  font-weight: 650;
+}
+.ws-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ws-tags span {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 13px;
+}
+.ws-side,
+.ws-identity,
+.ws-mobile-head,
+.ws-mobile-menu,
+.ws-bottom {
+  display: none;
+}
+.compose-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(500px, 94vw);
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 18px 22px;
+  background: var(--sheet);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+.compose-dialog::backdrop {
+  background: #0009;
+}
+.compose-dialog header {
+  padding: 0;
+  min-height: 40px;
+}
+.compose-dialog h2 {
+  font-size: 20px;
+}
+.compose-dialog .stack,
+.compose-options {
+  margin-top: 18px;
+}
+.compose-options {
+  display: grid;
+  gap: 10px;
+}
+.compose-dialog input {
+  max-width: 100%;
+}
+@media (min-width: 1200px) {
+  .ws-home {
+    grid-template-columns: 200px minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+  .ws-side {
+    display: flex;
+  }
+}
+@media (min-width: 1440px) {
+  .ws-home {
+    grid-template-columns: 220px repeat(3, minmax(0, 1fr));
+  }
+  .ws-identity {
+    display: flex;
+  }
+}
+@media (min-width: 768px) and (max-width: 1199px) {
+  .ws-layout {
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .ws-nav nav a {
+    gap: 8px;
+  }
+}
+@media (max-width: 767px) {
+  .ws-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+  .ws-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ws-mobile-head > a:first-of-type {
+    font-size: 28px;
+  }
+  .ws-nav,
+  .ws-side,
+  .ws-identity {
+    display: none;
+  }
+  .ws-mobile-menu {
+    display: grid;
+    position: absolute;
+    inset: 52px 0 65px;
+    background: var(--field);
+    z-index: 5;
+    overflow: auto;
+    padding: 16px;
+  }
+  .ws-layout > main {
+    flex: 1;
+  }
+  .ws-column > header {
+    min-height: 48px;
+  }
+  .ws-surface {
+    border: 0;
+    border-radius: 0;
+  }
+  .ws-bottom {
+    display: flex;
+    justify-content: space-around;
+    background: var(--field);
+    border-top: 1px solid var(--line);
+    padding: 5px 0 max(env(safe-area-inset-bottom), 5px);
+  }
+  .ws-bottom > * {
+    min-width: 44px;
+    min-height: 44px;
+    display: grid;
+    place-content: center;
+    color: var(--muted);
+  }
+  .ws-bottom [aria-current='page'] {
+    color: var(--ink);
+  }
+  .ws-bottom button {
+    background: var(--line);
+    border-radius: 14px;
+  }
+  .ws-prompt .ws-compose svg {
+    display: none;
+  }
+  .ws-row {
+    padding: 16px;
+  }
+  .compose-dialog {
+    margin: auto auto 0;
+    width: 100%;
+    max-height: 85dvh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+.ws-brand,
+.spine-brand strong:has(svg),
+.topbar strong:has(svg) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ws-nav svg,
+.ws-bottom svg,
+.ws-compose svg {
+  flex-shrink: 0;
+}
