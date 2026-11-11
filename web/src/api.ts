@@ -99,6 +99,18 @@ export interface PendingOAuthClient {
   last_error: string | null;
 }
 
+export interface RegistrationRequest {
+  id: string;
+  kind: 'oauth' | 'api_key';
+  requested_name: string;
+  label: string | null;
+  client: string;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'declined';
+  attempts: number;
+  last_seen_at: string;
+}
+
 export interface ApiKey {
   id: string;
   label: string;
