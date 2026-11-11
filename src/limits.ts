@@ -10,6 +10,11 @@ export const LIMITS = {
   doorbellAttempts: 5,
   doorbellTimeoutMs: 8_000,
   rateLimitPerMinute: 120,
+  roomPostChars: 8_000,
+  roomMembers: 50,
+  roomReadDefault: 30,
+  roomReadMax: 100,
+  attachmentsPerMessage: 10,
 } as const;
 
 /** Bearer-auth helpers reject tokens that omit expiresAt. Bot tokens stay valid until revoke. */

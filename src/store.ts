@@ -3,7 +3,9 @@ import type { Pool, PoolClient } from './db.js';
 import { encryptSecret, generateToken, generateWebhookSecret, hashToken, tokenPrefix } from './crypto.js';
 import { UserError, isUniqueViolation } from './errors.js';
 import { LIMITS } from './limits.js';
+import { insertAttachments, loadAttachments, resolveAttachments, type AttachmentView } from './attachments.js';
 import { renderDoorbellBody, type DoorbellNotice } from './doorbell.js';
+import { parseMentions } from './mentions.js';
 import { UNASSIGNED_USER_ID, assertCanReach, reachableBots } from './tenancy.js';
 import {
   assertWebhookUrl,
@@ -36,7 +38,7 @@ export interface Actor {
   ownerName: string;
 }
 
-interface BotRecord extends PublicBot {
+export interface BotRecord extends PublicBot {
   webhook_url: string | null;
   webhook_secret_enc: string | null;
   webhook_profile: WebhookProfile | null;
@@ -49,11 +51,11 @@ interface BotRecord extends PublicBot {
   owner_status: 'active' | 'suspended';
 }
 
-interface Queryable {
+export interface Queryable {
   query: Pool['query'];
 }
 
-function publicBot(row: { id: string; name: string; description: string; capabilities: string[] }): PublicBot {
+export function publicBot(row: { id: string; name: string; description: string; capabilities: string[] }): PublicBot {
   return {
     id: row.id,
     name: row.name,
@@ -62,7 +64,7 @@ function publicBot(row: { id: string; name: string; description: string; capabil
   };
 }
 
-function toActor(row: BotRecord): Actor {
+export function toActor(row: BotRecord): Actor {
   return {
     ...publicBot(row),
     webhookConfigured: row.webhook_url !== null,
@@ -97,7 +99,7 @@ export async function writeAudit(
   );
 }
 
-async function enqueueDoorbell(
+export async function enqueueDoorbell(
   db: Queryable,
   recipient: BotRecord,
   notice: Omit<DoorbellNotice, 'id' | 'occurred_at' | 'bot'>,
@@ -117,10 +119,10 @@ async function enqueueDoorbell(
   );
 }
 
-const BOT_SELECT = `b.id, b.name, b.description, b.capabilities, b.webhook_url, b.webhook_secret_enc, b.webhook_profile, b.revoked_at, b.token_prefix, b.created_at, b.updated_at, b.owner_user_id, u.display_name AS owner_name, u.status AS owner_status`;
-const BOT_FROM = `FROM bots b JOIN users u ON u.id = b.owner_user_id`;
+export const BOT_SELECT = `b.id, b.name, b.description, b.capabilities, b.webhook_url, b.webhook_secret_enc, b.webhook_profile, b.revoked_at, b.token_prefix, b.created_at, b.updated_at, b.owner_user_id, u.display_name AS owner_name, u.status AS owner_status`;
+export const BOT_FROM = `FROM bots b JOIN users u ON u.id = b.owner_user_id`;
 
-async function findActive(db: Queryable, to: string): Promise<BotRecord | null> {
+export async function findActive(db: Queryable, to: string): Promise<BotRecord | null> {
   if (isUuid(to)) {
     const byId = await db.query<BotRecord>(
       `SELECT ${BOT_SELECT} ${BOT_FROM} WHERE b.id = $1 AND b.revoked_at IS NULL`,
@@ -409,7 +411,7 @@ export async function directory(pool: Pool, actor: Actor) {
   return reachableBots(pool, actor);
 }
 
-async function withTx<T>(pool: Pool, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function withTx<T>(pool: Pool, fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -429,12 +431,16 @@ export interface SentMessage {
   thread_id: string;
   to: PublicBot;
   created_at: string;
+  attachments: AttachmentView[];
+  /** The recipient was @mentioned. Other names in the text are ignored: a DM only reaches its recipient. */
+  mentioned: boolean;
+  mentions_ignored: string[];
 }
 
 export async function sendMessage(
   pool: Pool,
   actor: Actor,
-  input: { to: string; text: string; threadId?: string | null },
+  input: { to: string; text: string; threadId?: string | null; attachments?: readonly string[] | null },
 ): Promise<SentMessage> {
   const text = requireText(input.text, LIMITS.messageChars, 'Message');
   const recipient = await findActive(pool, input.to);
@@ -442,6 +448,9 @@ export async function sendMessage(
   await assertCanReach(pool, actor, recipient);
   const threadId = input.threadId ? requireUuid(input.threadId, 'thread_id') : randomUUID();
   const id = randomUUID();
+  const files = await resolveAttachments(pool, actor.id, input.attachments);
+  const mentions = parseMentions(text);
+  const mentioned = mentions.includes(recipient.name);
   const createdAt = await withTx(pool, async (client) => {
     const inserted = await client.query<{ created_at: Date }>(
       `INSERT INTO messages (id, thread_id, from_bot_id, to_bot_id, kind, body)
@@ -455,14 +464,23 @@ export async function sendMessage(
       targetId: recipient.id,
       resourceType: 'message',
       resourceId: id,
-      detail: { thread_id: threadId, chars: text.length, preview: preview(text, 120) },
+      detail: {
+        thread_id: threadId,
+        chars: text.length,
+        preview: preview(text, 120),
+        ...(files.length > 0 ? { attachments: files.map((file) => file.id) } : {}),
+        ...(mentioned ? { mentioned: true } : {}),
+      },
     });
+    await insertAttachments(client, 'message_attachments', id, files);
     await enqueueDoorbell(client, recipient, {
       type: 'message.created',
       from: { id: actor.id, name: actor.name },
       resource: { type: 'message', id },
       thread_id: threadId,
       preview: preview(text),
+      ...(mentioned ? { mentioned: true } : {}),
+      ...(files.length > 0 ? { attachments: files.length } : {}),
     });
     return inserted.rows[0]?.created_at;
   });
@@ -472,6 +490,9 @@ export async function sendMessage(
     thread_id: threadId,
     to: publicBot(recipient),
     created_at: createdAt.toISOString(),
+    attachments: files,
+    mentioned,
+    mentions_ignored: mentions.filter((name) => name !== recipient.name && name !== actor.name),
   };
 }
 
@@ -532,6 +553,7 @@ export interface InboxMessage {
   text: string;
   created_at: string;
   read_at: string | null;
+  attachments: AttachmentView[];
 }
 
 export async function readInbox(
@@ -565,6 +587,7 @@ export async function readInbox(
      LIMIT $4`,
     [actor.id, input.unreadOnly === true, threadId, limit],
   );
+  const attachments = await loadAttachments(pool, 'message_attachments', result.rows.map((row) => row.id));
   return result.rows.map((row) => ({
     id: row.id,
     thread_id: row.thread_id,
@@ -573,6 +596,7 @@ export async function readInbox(
     text: row.body,
     created_at: row.created_at.toISOString(),
     read_at: row.read_at ? row.read_at.toISOString() : null,
+    attachments: attachments.get(row.id) ?? [],
   }));
 }
 

@@ -27,13 +27,15 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
     'Optional: X-Botbridge-Bot: your-bot-name, or use the URL /mcp/b/your-bot-name',
     `A legacy per-bot token still works in place of the key: Authorization: Bearer ${legacy}`,
   ].join('\n');
+  const toolsNote =
+    'Tools: DMs (send_message, read_inbox), tasks, rooms (create_room, post_room, read_room; @name rings that member), and files (upload_file, then attachments on send_message or post_room; get_file to download).';
   return {
     mcpUrl,
     resourceMetadataUrl: oauth ? `${origin}/.well-known/oauth-protected-resource/mcp` : null,
     oauth,
     tokenPlaceholder: legacy,
     snippets: {
-      generic: [`URL: ${mcpUrl}`, oauthNote, keyNote].join('\n\n'),
+      generic: [`URL: ${mcpUrl}`, oauthNote, keyNote, toolsNote].join('\n\n'),
       claudeCode: [httpConfig(mcpUrl, false), '', oauthNote, '', httpConfig(mcpUrl, true), '', keyNote].join('\n'),
       cursor: [httpConfig(mcpUrl, false), '', oauthNote, '', httpConfig(mcpUrl, true), '', keyNote].join('\n'),
       grok: [
@@ -43,6 +45,7 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
         keyHeader,
         `Several Grok Bots on one account: give each its own URL, ${mcpUrl}/b/your-bot-name. The bot is created on first sign-in. No dashboard step.`,
         'A webhook routine is separate: it wakes the bot. The connector is how the bot calls tools after it is awake.',
+        'Doorbell events: message.created, task.created, task.completed, broadcast.created, room.mention (someone wrote @your-bot in a room), room.invited. On a room event, call read_room; for attachments, call get_file.',
         `Legacy per-bot tokens still work: Authorization: Bearer ${legacy}`,
       ].join('\n'),
       openbot: [
@@ -50,6 +53,7 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
         `URL: ${mcpUrl}`,
         keyHeader,
         'For the doorbell, create a webhook routine and save its URL and secret on this bot with the openbot profile.',
+        'Room posts only ring the doorbell when they @mention this bot (room.mention). Read the rest with read_room.',
         `Legacy per-bot tokens still work: Authorization: Bearer ${legacy}`,
       ].join('\n'),
       chatgpt: oauth
