@@ -1,4 +1,6 @@
-import { actorById } from '../src/store.js';
+import { createServer, type Server } from 'node:http';
+import { actorById, readInbox, setWebhook } from '../src/store.js';
+import { processDueJobs } from '../src/doorbell.js';
 import { requestConnection, suspendUser } from '../src/tenancy.js';
 import { beforeAll, afterAll, expect, it } from 'vitest';
 import { listenForTests, resetDb, type TestServer } from './helpers.js';
@@ -90,4 +92,68 @@ it('scopes summaries, replies, rooms, tasks and attachments to the selected bot'
   try {
     expect((await request(path(a) + '/summary', 'member')).status).toBe(403);
   } finally { await suspendUser(app.pool, actor.ownerUserId, false); }
+});
+
+it('delivers a workspace compose message to the recipient inbox and doorbell', async () => {
+  await resetDb(app.pool);
+  await app.pool.query("UPDATE users SET status='active' WHERE clerk_user_id='member'");
+  const from = (await ok<CreatedBot>('/api/admin/bots', 'member', { name: 'composer' })).bot.id;
+  const listener = (await ok<CreatedBot>('/api/admin/bots', 'member', { name: 'listener' })).bot.id;
+  const quiet = (await ok<CreatedBot>('/api/admin/bots', 'member', { name: 'quiet' })).bot.id;
+  const captured: string[] = [];
+  const hook: Server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      captured.push(Buffer.concat(chunks).toString('utf8'));
+      res.statusCode = 200;
+      res.end('ok');
+    });
+  });
+  await new Promise<void>((resolve) => hook.listen(0, '127.0.0.1', resolve));
+  const address = hook.address();
+  if (!address || typeof address === 'string') throw new Error('hook did not bind');
+  try {
+    await setWebhook(app.pool, app.config.secret, {
+      name: 'listener',
+      url: `http://127.0.0.1:${address.port}/hook`,
+      profile: 'generic',
+    });
+    const sent = await ok<{ doorbell: boolean; to: { name: string }; thread_id: string }>(
+      '/api/workspace/bots/' + from + '/messages',
+      'member',
+      { to: listener, text: 'compose-reaches-the-bot', attachments: [] },
+    );
+    expect(sent.doorbell).toBe(true);
+    expect(sent.to.name).toBe('listener');
+    const listenerActor = await actorById(app.pool, listener);
+    if (!listenerActor) throw new Error('listener missing');
+    const inbox = await readInbox(app.pool, listenerActor, {});
+    expect(inbox.map((message) => message.text)).toContain('compose-reaches-the-bot');
+    const jobs = await app.pool.query<{ event: string; body: string }>(
+      `SELECT event, body FROM doorbell_jobs WHERE bot_id = $1`,
+      [listener],
+    );
+    expect(jobs.rows).toHaveLength(1);
+    expect(jobs.rows[0]?.event).toBe('message.created');
+    expect(jobs.rows[0]?.body).toContain('compose-reaches-the-bot');
+    await app.pool.query(`UPDATE doorbell_jobs SET next_attempt_at = now() WHERE delivered_at IS NULL`);
+    expect(await processDueJobs(app.pool, app.config.secret)).toBe(1);
+    expect(captured.some((body) => body.includes('compose-reaches-the-bot'))).toBe(true);
+
+    const quietSend = await ok<{ doorbell: boolean }>(
+      '/api/workspace/bots/' + from + '/messages',
+      'member',
+      { to: quiet, text: 'compose-stays-in-inbox', attachments: [] },
+    );
+    expect(quietSend.doorbell).toBe(false);
+    const quietActor = await actorById(app.pool, quiet);
+    if (!quietActor) throw new Error('quiet missing');
+    const quietInbox = await readInbox(app.pool, quietActor, {});
+    expect(quietInbox.map((message) => message.text)).toContain('compose-stays-in-inbox');
+    const quietJobs = await app.pool.query(`SELECT 1 FROM doorbell_jobs WHERE bot_id = $1`, [quiet]);
+    expect(quietJobs.rowCount).toBe(0);
+  } finally {
+    await new Promise<void>((resolve, reject) => hook.close((error) => (error ? reject(error) : resolve())));
+  }
 });

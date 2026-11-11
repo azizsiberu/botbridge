@@ -4,6 +4,12 @@ import { base, post, useData, type Agent, type ReachableBot, type RoomSummary } 
 import { ErrorNote, Field, Loading } from './ui';
 
 export type Mode = 'Message' | 'Room post' | 'Task' | 'Broadcast';
+function sendLabel(mode: Mode): string {
+  if (mode === 'Task') return 'Assign task';
+  if (mode === 'Room post') return 'Post to room';
+  if (mode === 'Broadcast') return 'Review broadcast';
+  return 'Send message';
+}
 export interface Draft {
   mode?: Mode;
   target?: string;
@@ -48,8 +54,10 @@ export function Composer({
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
+  const saved = useRef(false);
   const uploaded = useRef(new WeakMap<File,string>());
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const root = base(bot.id);
   const [retry, setRetry] = useState(0);
   const people = useData<ReachableBot[]>(mode === 'Message' || mode === 'Task' ? root + '/directory' : '', retry);
@@ -68,7 +76,11 @@ export function Composer({
     if (!lock.current && (!(text || files.length) || window.confirm('Discard this draft?'))) close();
   }
   async function send() {
-    if (lock.current || !mode) return;
+    if (lock.current || saved.current || !mode) return;
+    if (mode !== 'Broadcast' && !target) {
+      setError(mode === 'Room post' ? 'Choose a room.' : 'Choose a bot.');
+      return;
+    }
     if (
       mode === 'Broadcast' &&
       !confirm('Send this broadcast to every other reachable bot, including approved connections?')
@@ -87,11 +99,27 @@ export function Composer({
           ids.push(id);
         }
       }
-      if (mode === 'Message')
-        await post(root + '/messages', { to: target, text, threadId: initial.thread, attachments: ids });
+      if (mode === 'Message') {
+        const body: { to: string; text: string; threadId?: string; attachments: string[] } = {
+          to: target,
+          text,
+          attachments: ids,
+        };
+        if (initial.thread) body.threadId = initial.thread;
+        const result = await post<{ doorbell: boolean; to: { name: string } }>(root + '/messages', body);
+        if (!result.doorbell) {
+          saved.current = true;
+          setNotice(
+            result.to.name +
+              ' has this message in its inbox. It has no doorbell webhook, so it will not wake up. On that bot\'s page, set a webhook URL, a profile (generic, openbot, or grok), and a secret.',
+          );
+          return;
+        }
+      }
       if (mode === 'Room post') await post(root + '/rooms/' + target + '/posts', { text, attachments: ids });
       if (mode === 'Task') await post(root + '/tasks', { to: target, instructions: text });
       if (mode === 'Broadcast') await post(root + '/broadcast', { text });
+      saved.current = true;
       sent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send.');
@@ -191,19 +219,17 @@ export function Composer({
             </Field>
           )}
           {error && <ErrorNote message={error} />}
+          {notice ? <p role="status">{notice}</p> : null}
           <button
+            type="button"
             className="btn btn-primary"
-            disabled={busy || !text.trim() || (mode !== 'Broadcast' && !choices?.some((x) => x.id === target))}
+            disabled={!notice && (busy || !text.trim() || (mode !== 'Broadcast' && !choices?.some((x) => x.id === target)))}
+            onClick={() => {
+              if (notice) sent();
+              else void send();
+            }}
           >
-            {busy
-              ? 'Sending…'
-              : mode === 'Task'
-                ? 'Assign task'
-                : mode === 'Room post'
-                  ? 'Post to room'
-                  : mode === 'Broadcast'
-                    ? 'Review broadcast'
-                    : 'Send message'}
+            {notice ? 'Close' : busy ? 'Sending…' : sendLabel(mode)}
           </button>
         </form>
       )}

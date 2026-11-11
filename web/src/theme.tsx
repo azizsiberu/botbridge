@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './social';
 
 export type ThemeName = 'light' | 'dark';
 
@@ -22,12 +23,21 @@ export function useTheme(): [ThemeName, (theme: ThemeName) => void] {
   return [theme, applyTheme];
 }
 
-export function ThemeButton() {
+export function ThemeButton({ nav = false }: { nav?: boolean }) {
   const [theme, setTheme] = useTheme();
   const next = theme === 'dark' ? 'light' : 'dark';
+  const label = next === 'light' ? 'Light theme' : 'Dark theme';
+  if (nav) {
+    return (
+      <button type="button" className="nav-item" onClick={() => setTheme(next)}>
+        <Icon name={label} />
+        <span>{label}</span>
+      </button>
+    );
+  }
   return (
     <button type="button" className="theme-toggle" onClick={() => setTheme(next)}>
-      {next === 'light' ? 'Light theme' : 'Dark theme'}
+      {label}
     </button>
   );
 }

@@ -1,7 +1,7 @@
 import {
   Bell, Bot, CircleDot, ClipboardList, Hash, Heart, House, KeyRound,
-  LayoutDashboard, Mail, Menu, Network, Plus, ScrollText, Search,
-  Send, Settings, ShieldCheck, SquarePen, UserRound, X,
+  LayoutDashboard, LogOut, Mail, Menu, Moon, Network, Plus, ScrollText, Search,
+  Send, Settings, ShieldCheck, SquarePen, Sun, UserRound, X,
 } from 'lucide-react';
 
 export function Avatar({ name, large = false }: { name: string; large?: boolean }) {
@@ -32,6 +32,9 @@ const icons = {
   'API keys': KeyRound,
   Audit: ScrollText,
   Admin: ShieldCheck,
+  'Sign out': LogOut,
+  'Light theme': Sun,
+  'Dark theme': Moon,
 };
 
 export type IconName = keyof typeof icons;

@@ -56,7 +56,7 @@ An 8px grid: 4, 8, 16, 24, 32, 48.
 ## Components
 
 - **Workspace.** Left navigation, one column, and on a wide screen an activity column and a profile column. This layout is the reference and stays as it is.
-- **Desk navigation.** The same icon row, with the routes that manage the bridge. The current route is a filled rounded row, not a colored bar.
+- **Navigation.** The workspace rail and the desk rail use one row: 15px text, a 24px icon at stroke 1.75, 10px by 12px padding, and a 44px row. The current route is a filled rounded row. Workspace settings, the account name, and the theme control use that same row, with no smaller or indented items.
 - **Rows.** Bots, mail, threads, tasks, connections, keys, audit, deliveries, accounts, and activity are avatar rows inside one bordered list. A row shows the name, the time, one line of detail, and the status.
 - **Buttons.** Primary is the accent fill with accent ink. Secondary is a bordered button. Danger is danger-colored text with a border. Hover changes the fill, not the text color.
 - **Status.** A colored word (active, revoked, unread, failed), not a tinted badge.

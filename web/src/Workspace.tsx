@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
-import { Avatar, Icon } from './social';
+import { Avatar, Icon, type IconName } from './social';
 import { Composer, type Draft } from './Composer';
 import { Directory, Events, Messages, ProfileCard, Rooms, State, Tasks } from './WorkspaceViews';
 import { base, useData, type Agent, type Summary } from './workspace-data';
@@ -21,13 +21,13 @@ const desk = [
   ['/overview', 'Overview'],
   ['/bots', 'Manage bots'],
   ['/mail', 'Mail explorer'],
-  ['/tasks', 'Task explorer'],
+  ['/tasks', 'Tasks'],
+  ['/doorbell', 'Deliveries'],
   ['/connections', 'Connections'],
   ['/keys', 'API keys'],
-  ['/audit', 'Audit log'],
-  ['/doorbell', 'Deliveries'],
+  ['/audit', 'Audit'],
   ['/settings', 'Settings'],
-] as const;
+] as const satisfies ReadonlyArray<readonly [string, IconName]>;
 export function Workspace({ signOut }: { signOut?: () => void | Promise<void> }) {
   const location = useLocation(),
     [botId, select] = useState(() => sessionStorage.getItem('botbridge-active-bot') ?? ''),
@@ -80,21 +80,35 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   const nav = (
     <>
       {links.map(([to, label]) => (
-        <NavLink key={to} to={to} end={to === '/'}>
+        <NavLink key={to} className="nav-item" to={to} end={to === '/'}>
           <Icon name={label} />
           <span>{label}</span>
         </NavLink>
       ))}
-      <details>
-        <summary>Workspace settings</summary>
+      <details className="nav-group">
+        <summary className="nav-item">
+          <Icon name="Settings" />
+          <span>Workspace settings</span>
+        </summary>
         {desk.map(([to, label]) => (
-          <Link key={to} to={to}>
-            {label}
+          <Link key={to} className="nav-item" to={to}>
+            <Icon name={label} />
+            <span>{label}</span>
           </Link>
         ))}
-        {me.data?.account.isAdmin && <Link to="/admin">Admin</Link>}
-        <ThemeButton />
-        {signOut && <button onClick={() => void signOut()}>Sign out</button>}
+        {me.data?.account.isAdmin && (
+          <Link className="nav-item" to="/admin">
+            <Icon name="Admin" />
+            <span>Admin</span>
+          </Link>
+        )}
+        <ThemeButton nav />
+        {signOut && (
+          <button type="button" className="nav-item" onClick={() => void signOut()}>
+            <Icon name="Sign out" />
+            <span>Sign out</span>
+          </button>
+        )}
       </details>
     </>
   );
@@ -138,8 +152,9 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
         </nav>
       )}
       <aside className="ws-nav">
-        <Link className="ws-brand" to="/">
-          <Icon name="Brand" /> botbridge
+        <Link className="nav-brand" to="/">
+          <Icon name="Brand" />
+          <span>botbridge</span>
         </Link>
         {selector()}
         <nav>{nav}</nav>
