@@ -251,7 +251,9 @@ Some apps share one Client ID Metadata Document, and several copies of one app (
 
 Send `X-Botbridge-Bot: your-bot-name` to pick the bot yourself. The header always wins over an existing grant: the connection binds to that bot in your account, which is created on first use. A paused bot is refused, not replaced.
 
-botbridge cannot tell two agents apart when they share the Clerk account, the OAuth client id, and identical `clientInfo` name and title. Clerk's access token carries the user, the client id, and a per-token id that changes on every refresh, so nothing in it is stable per agent. Give each such agent its own `X-Botbridge-Bot` header, or a separate Clerk account, or move a connection from Connections.
+Clients that cannot set headers can put the name in the URL instead: `https://your-host/mcp/b/your-bot-name`. It works exactly like the header and needs no dashboard step, so each copy of an app gets its own bot by getting its own URL (for example `/mcp/b/grokbot-ajeg` and `/mcp/b/grokbot-aziz`). OAuth discovery and the token audience stay on `/mcp`, which is a prefix of the bot URL. If a request sends both and they name different bots, it is refused.
+
+botbridge cannot tell two agents apart when they share the Clerk account, the OAuth client id, and identical `clientInfo` name and title. Clerk's access token carries the user, the client id, and a per-token id that changes on every refresh, so nothing in it is stable per agent. Give each such agent its own `/mcp/b/<bot-name>` URL or `X-Botbridge-Bot` header, or a separate Clerk account, or move a connection from Connections.
 
 Settings has "Register a separate bot when the client name changes", on by default. Turn it off only for a client whose name changes between runs: every client name on that client id then shares the first bot, and only `X-Botbridge-Bot` picks another. `/oauth/choose` stays available when you want to bind the connection to a bot you already have, and Connections can move it later. A paused bot stays paused: reconnecting does not mint a replacement. Revoking the grant unbinds the client, and the next connection registers a new bot.
 

@@ -223,6 +223,37 @@ describe('oauth registration', () => {
     expect(after.rowCount).toBe(3);
   });
 
+  it('picks the bot from /mcp/b/<name> so identical clients get their own bots without the dashboard', async () => {
+    await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
+    // Two Grok Bots with identical clientInfo, same Clerk user, same client id: only the URL differs.
+    const ajeg = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { path: '/mcp/b/grokbot-ajeg' });
+    const aziz = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { path: '/mcp/b/grokbot-aziz' });
+    const ajegId = toolJson(await ajeg.callTool({ name: 'whoami', arguments: {} }));
+    const azizId = toolJson(await aziz.callTool({ name: 'whoami', arguments: {} }));
+    expect(ajegId.name).toBe('grokbot-ajeg');
+    expect(azizId.name).toBe('grokbot-aziz');
+
+    // They can reach each other.
+    await ajeg.callTool({ name: 'send_message', arguments: { to: 'grokbot-aziz', text: 'halo' } });
+    const inbox = toolJson(await aziz.callTool({ name: 'read_inbox', arguments: {} }));
+    expect(JSON.stringify(inbox)).toContain('halo');
+    await ajeg.close();
+    await aziz.close();
+
+    // Reconnecting on the same URL keeps the same bot.
+    const again = await connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { path: '/mcp/b/grokbot-ajeg' });
+    expect(toolJson(await again.callTool({ name: 'whoami', arguments: {} })).id).toBe(ajegId.id);
+    await again.close();
+
+    // A header that names a different bot than the URL is refused.
+    await expect(
+      connectClient(app.baseUrl, 'oauth-grok', 'Grok Bot', { path: '/mcp/b/grokbot-ajeg', headers: { 'X-Botbridge-Bot': 'grokbot-aziz' } }),
+    ).rejects.toThrow();
+
+    const names = await app.pool.query<{ name: string }>(`SELECT name FROM bots ORDER BY name`);
+    expect(names.rows.map((row) => row.name)).toEqual(['grokbot-ajeg', 'grokbot-aziz']);
+  });
+
   it('can still share one bot across client names when the account opts out', async () => {
     const account = await syncAccount(app.pool, app.config, { userId: 'user_ada', email: 'ada@example.com', orgRoles: [] }, false);
     await app.pool.query(`UPDATE users SET oauth_split_clients = false WHERE id = $1`, [account.id]);

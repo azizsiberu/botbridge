@@ -24,7 +24,7 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
   const keyNote = [
     'API key: create one on the API keys page and send this header. Each client name becomes its own bot.',
     keyHeader,
-    'Optional: X-Botbridge-Bot: your-bot-name',
+    'Optional: X-Botbridge-Bot: your-bot-name, or use the URL /mcp/b/your-bot-name',
     `A legacy per-bot token still works in place of the key: Authorization: Bearer ${legacy}`,
   ].join('\n');
   return {
@@ -41,7 +41,7 @@ export function connectGuide(publicUrl: string | null, oauth: boolean, token?: s
         `URL: ${mcpUrl}`,
         oauth ? 'Sign in with OAuth, or send an account API key.' : 'Send an account API key.',
         keyHeader,
-        'The path has to be /mcp.',
+        `Several Grok Bots on one account: give each its own URL, ${mcpUrl}/b/your-bot-name. The bot is created on first sign-in. No dashboard step.`,
         'A webhook routine is separate: it wakes the bot. The connector is how the bot calls tools after it is awake.',
         `Legacy per-bot tokens still work: Authorization: Bearer ${legacy}`,
       ].join('\n'),
