@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection } from '../api';
-import { PageTitle } from '../Shell';
-import { Button, Card, Empty, ErrorNote, Loading, Pill } from '../ui';
+import { Button, DataTable, Empty, ErrorNote, Loading, PageTitle, Status } from '../ui';
 import { PendingOAuthClients } from './PendingOAuth';
 
 export function ConnectionsPage() {
@@ -26,15 +25,14 @@ export function ConnectionsPage() {
   return (
     <div>
       <PageTitle
-        kicker="Between accounts"
         title="Connections"
         lede="Your own bots can already talk. A link to another account starts as a request. Nothing is shared until they approve, and either of you can revoke it."
       />
       {error ? <ErrorNote message={error} /> : null}
       <PendingOAuthClients presentation="section" onLoaded={setWaiting} />
-      {!rows && !error ? <Loading label="Checking the request tray…" /> : null}
+      {!rows && !error ? <Loading label="Loading connections." /> : null}
       {rows && waiting === 0 && incoming.length === 0 && outgoing.length === 0 && active.length === 0 ? (
-        <Empty title="No bridges yet" body="Ask a bot to call request_connection, or wait for someone to invite this account. Approval stays here, with a person." />
+        <Empty title="No connections" body="Ask a bot to call request_connection, or wait for someone to invite this account. Approval stays here, with a person." />
       ) : null}
       <Section title="Waiting for you" rows={incoming} onDecide={load} />
       <Section title="You asked" rows={outgoing} />
@@ -46,35 +44,36 @@ export function ConnectionsPage() {
 function Section({ title, rows, onDecide }: { title: string; rows: Connection[]; onDecide?: () => void }) {
   if (rows.length === 0) return null;
   return (
-    <section className="mt-8">
-      <h2 className="serif text-3xl">{title}</h2>
-      <div className="mt-3 grid gap-3">
-        {rows.map((row) => (
-          <Card key={row.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Pill tone={row.kind === 'account' ? 'accent' : 'neutral'}>{row.kind}</Pill>
-                <Pill tone={row.status === 'active' ? 'ok' : 'warn'}>{row.status}</Pill>
-              </div>
-              <p className="mt-2 text-lg">
-                <span className="font-semibold">{label(row.from)}</span>
-                <span className="text-[var(--muted)]"> → {label(row.to)}</span>
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {row.direction === 'incoming' && row.status === 'pending' && onDecide ? (
-                <>
-                  <Button onClick={() => act(row.id, 'approve', onDecide)}>Approve</Button>
-                  <Button tone="ghost" onClick={() => act(row.id, 'decline', onDecide)}>Decline</Button>
-                </>
-              ) : null}
-              {row.status === 'active' && onDecide ? (
-                <Button tone="danger" onClick={() => act(row.id, 'revoke', onDecide)}>Revoke</Button>
-              ) : null}
-            </div>
-          </Card>
-        ))}
-      </div>
+    <section className="section">
+      <h2>{title}</h2>
+      <DataTable label={title}>
+        <thead>
+          <tr><th>From</th><th>To</th><th>Kind</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{label(row.from)}</td>
+              <td>{label(row.to)}</td>
+              <td>{row.kind}</td>
+              <td><Status tone={row.status === 'active' ? 'ok' : 'warn'}>{row.status}</Status></td>
+              <td>
+                <div className="button-row">
+                  {row.direction === 'incoming' && row.status === 'pending' && onDecide ? (
+                    <>
+                      <Button onClick={() => act(row.id, 'approve', onDecide)}>Approve</Button>
+                      <Button tone="secondary" onClick={() => act(row.id, 'decline', onDecide)}>Decline</Button>
+                    </>
+                  ) : null}
+                  {row.status === 'active' && onDecide ? (
+                    <Button tone="danger" onClick={() => act(row.id, 'revoke', onDecide)}>Revoke</Button>
+                  ) : null}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
     </section>
   );
 }

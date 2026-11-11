@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type Overview } from '../api';
-import { PageTitle } from '../Shell';
+import { DataTable, ErrorNote, Loading, PageTitle, time } from '../ui';
 import { PendingOAuthClients } from './PendingOAuth';
-import { Card, ErrorNote, Loading, Pill, Stat, time } from '../ui';
 
 export function OverviewPage() {
   const [days, setDays] = useState<14 | 30>(14);
@@ -19,69 +18,70 @@ export function OverviewPage() {
   return (
     <div>
       <PageTitle
-        kicker="Desk"
+        title="Overview"
         lede="Mail, tasks, and doorbells for the bots you can see."
-        title="What moved today"
         action={
-          <div className="flex gap-2">
-            <button type="button" className={days === 14 ? 'text-[var(--ink)]' : 'text-[var(--muted)]'} onClick={() => setDays(14)}>
-              14 days
-            </button>
-            <button type="button" className={days === 30 ? 'text-[var(--ink)]' : 'text-[var(--muted)]'} onClick={() => setDays(30)}>
-              30 days
-            </button>
+          <div className="segment" role="group" aria-label="Range">
+            <button type="button" aria-pressed={days === 14} onClick={() => setDays(14)}>14 days</button>
+            <button type="button" aria-pressed={days === 30} onClick={() => setDays(30)}>30 days</button>
           </div>
         }
       />
       <PendingOAuthClients />
       {error ? <ErrorNote message={error} /> : null}
-      {!data && !error ? <Loading label="Counting the mail…" /> : null}
+      {!data && !error ? <Loading label="Loading overview." /> : null}
       {data ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stats">
             <Stat label="Active bots" value={data.bots.active} hint={`${data.bots.revoked} revoked`} />
-            <Stat label="Messages" value={data.messages.total} hint={`${data.messages.unread} still unread`} />
+            <Stat label="Messages" value={data.messages.total} hint={`${data.messages.unread} unread`} />
             <Stat label="Open tasks" value={data.tasks.open} hint={`${data.tasks.completed} completed`} />
-            <Stat label="Doorbell" value={data.doorbell.delivered} hint={`${data.doorbell.failed} failed · ${data.doorbell.pending} waiting`} />
+            <Stat label="Doorbell" value={data.doorbell.delivered} hint={`${data.doorbell.failed} failed, ${data.doorbell.pending} waiting`} />
           </div>
-          <Card className="mt-4 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="serif text-2xl">Traffic</h2>
-              <div className="flex gap-3 text-xs text-[var(--muted)]">
-                <span>Mail</span>
-                <span>Tasks</span>
+          <section className="section">
+            <div className="panel">
+              <h2>Traffic</h2>
+              <div className="legend">
+                <span><i className="swatch mail" aria-hidden="true" />Mail</span>
+                <span><i className="swatch task" aria-hidden="true" />Tasks</span>
               </div>
+              <Chart mail={data.messages.series} tasks={data.tasks.series} />
             </div>
-            <Chart mail={data.messages.series} tasks={data.tasks.series} />
-          </Card>
-          <Card className="mt-4 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4">
-              <h2 className="serif text-2xl">Recent activity</h2>
-              <Link to="/audit" className="text-sm text-[var(--muted)]">
-                Full log
-              </Link>
+          </section>
+          <section className="section">
+            <div className="section-head">
+              <h2>Recent activity</h2>
+              <Link to="/audit">Open the audit log</Link>
             </div>
-            <ul>
-              {data.recent.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-5 py-3 text-sm">
-                  <div>
-                    <span className="font-medium">{entry.action}</span>
-                    <span className="text-[var(--muted)]"> · {entry.actor_name ?? 'system'}</span>
-                    {entry.target_name ? <span className="text-[var(--muted)]"> → {entry.target_name}</span> : null}
-                  </div>
-                  <time className="shrink-0 text-[var(--muted)]">{time(entry.created_at)}</time>
-                </li>
-              ))}
-              {data.recent.length === 0 ? <li className="px-5 py-6 text-sm text-[var(--muted)]">No activity yet.</li> : null}
-            </ul>
-          </Card>
-          <div className="mt-4 flex gap-2">
-            <Pill tone="accent">Delivered {data.doorbell.delivered}</Pill>
-            <Pill tone={data.doorbell.failed ? 'danger' : 'neutral'}>Failed {data.doorbell.failed}</Pill>
-            <Pill>Pending {data.doorbell.pending}</Pill>
-          </div>
+            <DataTable label="Recent activity">
+              <thead>
+                <tr><th>When</th><th>Action</th><th>Actor</th><th>Target</th></tr>
+              </thead>
+              <tbody>
+                {data.recent.length === 0 ? <tr><td colSpan={4}>No activity yet.</td></tr> : null}
+                {data.recent.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{time(entry.created_at)}</td>
+                    <td>{entry.action}</td>
+                    <td>{entry.actor_name ?? 'system'}</td>
+                    <td>{entry.target_name ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          </section>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string | number; hint: string }) {
+  return (
+    <div className="stat">
+      <span>{label}</span>
+      <b>{value}</b>
+      <span>{hint}</span>
     </div>
   );
 }
@@ -89,13 +89,16 @@ export function OverviewPage() {
 function Chart({ mail, tasks }: { mail: Array<{ day: string; count: number }>; tasks: Array<{ day: string; count: number }> }) {
   const max = Math.max(1, ...mail.map((row) => row.count), ...tasks.map((row) => row.count));
   return (
-    <div className="flex h-44 items-end gap-1">
-      {mail.map((row, index) => (
-        <div key={row.day} className="flex h-full flex-1 items-end gap-0.5" title={`${row.day}: ${row.count} messages, ${tasks[index]?.count ?? 0} tasks`}>
-          <div className="w-1/2 rounded-t bg-[var(--accent)]" style={{ height: `${(row.count / max) * 100}%` }} />
-          <div className="w-1/2 rounded-t bg-[var(--bg-3)]" style={{ height: `${((tasks[index]?.count ?? 0) / max) * 100}%` }} />
-        </div>
-      ))}
+    <div className="chart" role="img" aria-label="Mail and tasks per day">
+      {mail.map((row, index) => {
+        const taskCount = tasks[index]?.count ?? 0;
+        return (
+          <div key={row.day} className="col" title={`${row.day}: ${row.count} messages, ${taskCount} tasks`}>
+            <div className="bar mail" style={{ height: `${(row.count / max) * 100}%` }} />
+            <div className="bar task" style={{ height: `${(taskCount / max) * 100}%` }} />
+          </div>
+        );
+      })}
     </div>
   );
 }

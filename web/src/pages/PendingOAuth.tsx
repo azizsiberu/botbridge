@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PendingOAuthClient } from '../api';
-import { Button, Card, Pill, time } from '../ui';
+import { Button, DataTable, time } from '../ui';
 
 export function PendingOAuthClients({
   presentation = 'banner',
@@ -31,35 +31,32 @@ export function PendingOAuthClients({
 
   if (!clients || clients.length === 0) return null;
 
-  const rows = clients.map((client) => <ClientRow key={client.client_id} client={client} />);
-  if (presentation === 'section') {
-    return (
-      <section className="mt-8">
-        <h2 className="serif text-3xl">Waiting for a bot</h2>
-        <div className="mt-3 grid gap-3">{rows}</div>
-      </section>
-    );
-  }
   return (
-    <div className="mb-4 grid gap-3" role="status">
-      {rows}
-    </div>
-  );
-}
-
-function ClientRow({ client }: { client: PendingOAuthClient }) {
-  return (
-    <Card className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <Pill tone="warn">OAuth</Pill>
-          <p className="font-semibold">{client.name}</p>
-        </div>
-        {client.name !== client.client_id ? <p className="mt-2 break-all text-xs text-[var(--muted)]">{client.client_id}</p> : null}
-        <p className="mt-2 text-sm text-[var(--muted)]">Tried {time(client.last_seen_at)}. Pick the bot it should use.</p>
-      </div>
-      <Button to={chooseBotPath(client.client_id)}>Choose bot</Button>
-    </Card>
+    <section className="section" role="status" style={presentation === 'banner' ? { marginTop: 0 } : undefined}>
+      <h2>Waiting for a bot</h2>
+      <DataTable label="OAuth clients waiting for a bot">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Client id</th>
+            <th>Tried</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clients.map((client) => (
+            <tr key={client.client_id}>
+              <td>{client.name}</td>
+              <td className="url">{client.client_id}</td>
+              <td>{time(client.last_seen_at)}</td>
+              <td>
+                <Button to={chooseBotPath(client.client_id)}>Choose bot</Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </section>
   );
 }
 

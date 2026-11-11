@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { allowedRedirectUrl, withRedirect, withoutRedirectParam } from '../../src/redirect';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
 import { Shell } from './Shell';
+import { clerkAppearance, ThemeButton, useTheme } from './theme';
 import { AuditPage } from './pages/Audit';
 import { BotPage } from './pages/Bot';
 import { BotsPage } from './pages/Bots';
@@ -20,26 +21,25 @@ import { AdminPage } from './pages/Admin';
 export function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [theme] = useTheme();
 
   useEffect(() => {
     publicConfig().then(setConfig).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to start'));
   }, []);
 
   if (error) return <Centered title="botbridge is not answering" body={error} />;
-  if (!config) return <Centered title="Opening the desk…" body="Loading the bridge." />;
-  if (config.devAuth) {
-    return <DevDesk version={config.version} />;
-  }
+  if (!config) return <Centered title="botbridge" body="Loading." />;
+  if (config.devAuth) return <DevDesk version={config.version} />;
   if (!config.clerkPublishableKey) {
     return (
       <Centered
         title="Clerk is not configured"
-        body="Set CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, BOTBRIDGE_PUBLIC_URL, and BOTBRIDGE_ADMIN_EMAILS, then rebuild is not required — restart the server."
+        body="Set CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, BOTBRIDGE_PUBLIC_URL, and BOTBRIDGE_ADMIN_EMAILS, then restart the server."
       />
     );
   }
   return (
-    <ClerkProvider publishableKey={config.clerkPublishableKey}>
+    <ClerkProvider publishableKey={config.clerkPublishableKey} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearance(theme)}>
       <ClerkGate version={config.version} publicUrl={config.publicUrl} />
     </ClerkProvider>
   );
@@ -62,22 +62,28 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
     if (leaveForRedirect && redirectUrl) window.location.replace(redirectUrl);
   }, [leaveForRedirect, redirectUrl]);
 
-  if (!isLoaded) return <Centered title="Opening the desk…" body="Checking your Clerk session." />;
+  if (!isLoaded) return <Centered title="botbridge" body="Checking your Clerk session." />;
   if (!isSignedIn) {
     if (onAuthScreen && rawRedirect && !redirectUrl) {
       return <Navigate to={withoutRedirectParam(location.pathname, location.search)} replace />;
     }
     if (!onAuthScreen) return <Navigate to={withRedirect('/sign-in', redirectUrl)} replace />;
     const afterAuth = redirectUrl ?? undefined;
+    const lede = signingUp
+      ? redirectUrl
+        ? 'Create an account. We will return you to the connection.'
+        : 'Create an account to manage your bots.'
+      : redirectUrl
+        ? 'Sign in. We will return you to the connection.'
+        : 'Sign in to manage your bots.';
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-10">
-        <div>
-          <p className="serif mb-6 text-center text-4xl italic">botbridge</p>
-          {redirectUrl ? (
-            <p className="mb-6 text-center text-sm text-[var(--muted)]">
-              {signingUp ? 'Create an account, then we return you to the connection.' : 'Sign in, then we return you to the connection.'}
-            </p>
-          ) : null}
+      <div className="auth">
+        <div className="auth-card">
+          <div className="auth-top">
+            <p className="brand">botbridge</p>
+            <ThemeButton />
+          </div>
+          <p className="lede">{lede}</p>
           {signingUp ? (
             <SignUp
               routing="hash"
@@ -133,10 +139,10 @@ function Desk({ version }: { version: string }) {
 
 function Centered({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="max-w-md text-center">
-        <p className="serif text-4xl italic">{title}</p>
-        <p className="mt-3 text-sm text-[var(--muted)]">{body}</p>
+    <div className="centered">
+      <div className="panel">
+        <h1>{title}</h1>
+        <p className="lede">{body}</p>
       </div>
     </div>
   );
