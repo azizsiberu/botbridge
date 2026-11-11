@@ -37,6 +37,11 @@ const writes = {
   openWorldHint: true,
 } as const;
 
+function authMethod(value: unknown): 'oauth' | 'api_key' | 'token' {
+  if (value === 'oauth' || value === 'api_key') return value;
+  return 'token';
+}
+
 function ok(data: Record<string, unknown>) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(data) }],
@@ -85,7 +90,7 @@ export function createBotbridgeHandler(deps: { pool: Pool; config: Config }) {
             description: actor.description,
             capabilities: actor.capabilities,
             owner: actor.ownerName,
-            auth: authInfo?.extra?.authMethod === 'oauth' ? 'oauth' : 'token',
+            auth: authMethod(authInfo?.extra?.authMethod),
             webhook: {
               configured: actor.webhookConfigured,
               profile: actor.webhookProfile,

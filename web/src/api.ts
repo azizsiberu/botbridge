@@ -85,6 +85,7 @@ export interface Grant {
   id: string;
   client_id: string;
   label: string | null;
+  origin_name: string | null;
   created_at: string;
   revoked_at: string | null;
   bot: { id: string; name: string };
@@ -94,6 +95,16 @@ export interface PendingOAuthClient {
   client_id: string;
   name: string;
   last_seen_at: string;
+  last_error: string | null;
+}
+
+export interface ApiKey {
+  id: string;
+  label: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
 }
 
 export interface Overview {
@@ -169,5 +180,6 @@ export interface Settings {
   limits: Record<string, number>;
   isAdmin?: boolean;
   signupMode?: 'open' | 'invite';
+  oauthSplitClients?: boolean;
   allowlist?: { emails: string[]; userIds: string[]; orgId: string | null; orgRole: string | null };
 }

@@ -12,7 +12,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 export async function resetDb(pool: Pool): Promise<void> {
-  await pool.query('TRUNCATE bots, oauth_pending_clients RESTART IDENTITY CASCADE');
+  await pool.query('TRUNCATE bots, api_keys, oauth_pending_clients RESTART IDENTITY CASCADE');
+  await pool.query('UPDATE users SET oauth_split_clients = false');
 }
 
 export interface TestServer {
@@ -48,10 +49,16 @@ export async function listenForTests(overrides: Partial<Config> = {}, extras: Pa
   };
 }
 
-export async function connectClient(url: string, token: string, name: string): Promise<Client> {
-  const client = new Client({ name, version: '0.1.0' });
+export async function connectClient(
+  url: string,
+  token: string,
+  name: string,
+  options: { title?: string; headers?: Record<string, string> } = {},
+): Promise<Client> {
+  const client = new Client({ name, version: '0.1.0', ...(options.title ? { title: options.title } : {}) });
   const transport = new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
     authProvider: { token: async () => token },
+    requestInit: options.headers ? { headers: options.headers } : undefined,
   });
   await client.connect(transport);
   return client;

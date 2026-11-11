@@ -37,3 +37,10 @@ jobs:
           DATABASE_URL: postgres://botbridge:botbridge@127.0.0.1:5432/botbridge_test
           BOTBRIDGE_SECRET: test-secret-not-for-production
           LOG_LEVEL: silent
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose build

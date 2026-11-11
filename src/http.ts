@@ -10,6 +10,7 @@ import { createTokenVerifier } from './auth.js';
 import type { Config } from './config.js';
 import type { Pool } from './db.js';
 import { log } from './log.js';
+import { mcpRequestStore } from './mcp-request.js';
 import { createBotbridgeHandler } from './mcp.js';
 import { createAdminAuth, createClerkDirectory, createOAuthVerifier, type AdminAuth, type ClerkDirectory, type OAuthVerifier } from './identity.js';
 import { consumeRate } from './store.js';
@@ -91,8 +92,12 @@ export function createApp(deps: AppDeps) {
   const selectionUrl = config.publicUrl ? `${config.publicUrl}/oauth/choose` : null;
   const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth, selectionUrl), resourceMetadataUrl });
 
-  app.all('/mcp', auth, async (req: Request, res: Response) => {
+  app.all('/mcp', (req, res, next) => {
+    mcpRequestStore.run(req, () => next());
+  }, auth, async (req: Request, res: Response) => {
     try {
+      const sessionId = req.auth?.extra?.mcpSessionId;
+      if (typeof sessionId === 'string' && sessionId) res.setHeader('mcp-session-id', sessionId);
       const calls = countToolCalls(req.body);
       const botId = req.auth?.clientId;
       if (calls > 0 && botId) {

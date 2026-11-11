@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, type Bot, type Delivery, type Guide } from '../api';
 import { Button, CopyButton, DataTable, ErrorNote, Field, PageTitle, Status, control } from '../ui';
-import { TokenOnce } from './Bots';
 
 const profiles = ['generic', 'openbot', 'grok'] as const;
 
@@ -11,7 +10,6 @@ export function BotPage() {
   const [bot, setBot] = useState<Bot | null>(null);
   const [guide, setGuide] = useState<Guide | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [issued, setIssued] = useState<{ name: string; token: string; guide: Guide; id: string } | null>(null);
   const [ping, setPing] = useState<Delivery | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -58,16 +56,6 @@ export function BotPage() {
         }
         action={
           <>
-            <Button
-              tone="secondary"
-              onClick={() => {
-                api<{ token: string; guide: Guide }>(`/api/admin/bots/${bot.id}/rotate-token`, { method: 'POST' })
-                  .then((body) => setIssued({ id: bot.id, name: bot.name, token: body.token, guide: body.guide }))
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-              }}
-            >
-              Rotate token
-            </Button>
             {bot.status === 'active' ? (
               <Button tone="danger" onClick={() => api(`/api/admin/bots/${bot.id}/revoke`, { method: 'POST' }).then(load).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'))}>
                 Revoke
@@ -174,10 +162,9 @@ export function BotPage() {
       </section>
       <section className="section panel">
         <h2>Connect</h2>
-        <p className="muted">Static tokens still work. OAuth clients use the URL alone. Paste a rotated token into the bearer snippets yourself. This page does not store it.</p>
+        <p className="muted">Add the URL and sign in, or send an account API key from the API keys page. This page does not keep a secret. Older bb_ tokens from the CLI still work.</p>
         {guide ? <GuideBlock guide={guide} /> : <p className="loading mt-3">Loading snippets.</p>}
       </section>
-      {issued ? <TokenOnce issued={issued} onClose={() => setIssued(null)} /> : null}
     </div>
   );
 }

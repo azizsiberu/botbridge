@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Settings } from '../api';
-import { ErrorNote, Loading, PageTitle } from '../ui';
+import { Button, ErrorNote, Loading, PageTitle } from '../ui';
 
 function labelize(key: string): string {
   const spaced = key.replace(/([A-Z])/g, ' $1').replace(/([a-z])(\d)/g, '$1 $2').toLowerCase();
@@ -10,8 +10,15 @@ function labelize(key: string): string {
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [split, setSplit] = useState(false);
+  const [saved, setSaved] = useState(false);
   useEffect(() => {
-    api<Settings>('/api/admin/settings').then(setSettings).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
+    api<Settings>('/api/admin/settings')
+      .then((body) => {
+        setSettings(body);
+        setSplit(body.oauthSplitClients === true);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
   }, []);
   return (
     <div>
@@ -40,6 +47,32 @@ export function SettingsPage() {
                 </div>
               ))}
             </dl>
+          </section>
+          <section className="panel wide">
+            <h2>Shared OAuth client ids</h2>
+            <p className="muted">
+              Some apps share one OAuth client id. With this on, a different client name at initialize gets its own bot.
+              Leave it off to keep one bot for that client id. You can move a connection from Connections.
+            </p>
+            <form
+              className="stack mt-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSaved(false);
+                api('/api/admin/settings', { method: 'PATCH', body: JSON.stringify({ oauthSplitClients: split }) })
+                  .then(() => setSaved(true))
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
+              }}
+            >
+              <label className="check">
+                <input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} />
+                <span>Register a separate bot when the client name changes</span>
+              </label>
+              <div className="button-row">
+                <Button type="submit">Save</Button>
+                {saved ? <span className="status status-ok">Saved</span> : null}
+              </div>
+            </form>
           </section>
           {settings.allowlist ? (
             <section className="panel wide">

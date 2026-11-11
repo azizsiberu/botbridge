@@ -3,7 +3,9 @@
 ## Unreleased
 
 - Sign-in keeps Clerk's `redirect_url` when it is this origin or an https subdomain of `BOTBRIDGE_PUBLIC_URL`, and returns there after sign-in.
-- An OAuth client whose account owns one active bot is bound on the first verified token (`oauth.grant.auto`). Accounts with several bots see the waiting client on Overview and Connections.
+- Connecting a client registers a bot. The first OAuth grant for a client id creates the bot (`oauth.bot.auto_created`) from `initialize` clientInfo, or from the OAuth client name. The same client id reuses that bot. Settings can give a shared client id a separate bot per client name. `/oauth/choose` binds a connection to a bot you already have.
+- Account API keys (`bbk_…`) live on their own desk page. A key resolves or creates a bot from the client name, or from `X-Botbridge-Bot`. Later requests in that session use that bot. Legacy `bb_` tokens are unchanged.
+- The Docker web stage copies the shared modules the dashboard imports, and CI builds the image.
 
 ## 0.2.0
 

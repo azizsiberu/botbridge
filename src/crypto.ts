@@ -6,6 +6,11 @@ export function generateToken(): string {
   return `bb_${randomBytes(32).toString('base64url')}`;
 }
 
+/** Account API key. Hashed at rest. Distinct from a per-bot `bb_` token. */
+export function generateApiKey(): string {
+  return `bbk_${randomBytes(32).toString('base64url')}`;
+}
+
 export function generateWebhookSecret(): string {
   return `bbs_${randomBytes(32).toString('base64url')}`;
 }

@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { api, type Bot, type Guide } from '../api';
-import { Button, CopyButton, DataTable, Dialog, ErrorNote, Field, Loading, PageTitle, Status, control } from '../ui';
+import { Link } from 'react-router';
+import { api, type Bot } from '../api';
+import { Button, DataTable, Dialog, ErrorNote, Field, Loading, PageTitle, Status, control } from '../ui';
 
 export function BotsPage() {
   const [query, setQuery] = useState('');
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [issued, setIssued] = useState<{ name: string; token: string; guide: Guide; id: string } | null>(null);
 
   function load(q = query) {
     api<{ bots: Bot[] }>(`/api/admin/bots?q=${encodeURIComponent(q)}`)
@@ -26,7 +25,7 @@ export function BotsPage() {
     <div>
       <PageTitle
         title="Bots"
-        lede="Each bot has its own token. Bots on this account can talk to each other. Other accounts need a connection you both accept."
+        lede="A bot appears when a client connects. Rename it, revoke it, or set a doorbell. Secrets live on API keys."
         action={<Button onClick={() => setOpen(true)}>New bot</Button>}
       />
       <div className="filters">
@@ -47,7 +46,7 @@ export function BotsPage() {
       {bots && bots.length > 0 ? (
         <DataTable label="Bots">
           <thead>
-            <tr><th>Name</th><th>Status</th><th>Doorbell</th><th>Token</th><th>Description</th></tr>
+            <tr><th>Name</th><th>Status</th><th>Doorbell</th><th>Description</th></tr>
           </thead>
           <tbody>
             {bots.map((bot) => (
@@ -55,7 +54,6 @@ export function BotsPage() {
                 <td><Link className="row-link" to={`/bots/${bot.id}`}>{bot.name}</Link></td>
                 <td><Status tone={bot.status === 'active' ? 'ok' : 'danger'}>{bot.status}</Status></td>
                 <td>{bot.webhook?.profile ?? '—'}</td>
-                <td>{bot.token_prefix}</td>
                 <td className="clip">{bot.description || '—'}</td>
               </tr>
             ))}
@@ -65,19 +63,17 @@ export function BotsPage() {
       {open ? (
         <CreateBot
           onClose={() => setOpen(false)}
-          onCreated={(value) => {
+          onCreated={() => {
             setOpen(false);
-            setIssued(value);
             load(query);
           }}
         />
       ) : null}
-      {issued ? <TokenOnce issued={issued} onClose={() => setIssued(null)} /> : null}
     </div>
   );
 }
 
-function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: (value: { name: string; token: string; guide: Guide; id: string }) => void }) {
+function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [capabilities, setCapabilities] = useState('');
@@ -91,11 +87,11 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: (va
         onSubmit={(event) => {
           event.preventDefault();
           setBusy(true);
-          api<{ token: string; bot: { id: string; name: string }; guide: Guide }>('/api/admin/bots', {
+          api('/api/admin/bots', {
             method: 'POST',
             body: JSON.stringify({ name, description, capabilities }),
           })
-            .then((body) => onCreated({ id: body.bot.id, name: body.bot.name, token: body.token, guide: body.guide }))
+            .then(() => onCreated())
             .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'))
             .finally(() => setBusy(false));
         }}
@@ -113,48 +109,27 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: (va
   );
 }
 
-export function TokenOnce({ issued, onClose }: { issued: { name: string; token: string; guide: Guide; id: string }; onClose: () => void }) {
-  const navigate = useNavigate();
-  return (
-    <Dialog title={`Token for ${issued.name}`} onClose={onClose}>
-      <p className="muted">This token is shown once. Copy it into the bot’s MCP config. Rotating it later invalidates this one.</p>
-      <pre className="code">{issued.token}</pre>
-      <div className="button-row mt-3">
-        <CopyButton value={issued.token} label="Copy token" />
-        <CopyButton value={issued.guide.snippets.claudeCode ?? ''} label="Copy Claude Code config" />
-      </div>
-      <div className="button-row mt-4">
-        <Button
-          onClick={() => {
-            onClose();
-            void navigate(`/bots/${issued.id}`);
-          }}
-        >
-          Open bot
-        </Button>
-      </div>
-    </Dialog>
-  );
-}
-
 function Onboarding({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="empty">
       <h2>No bots yet</h2>
-      <p>Create a bot to get a token. Bots on this account can message each other. Another account needs a connection you both accept.</p>
-      <div className="actions"><Button onClick={onCreate}>Create a bot</Button></div>
+      <p>Add the MCP URL in a client and sign in, or create an API key and connect with it. The bot shows up here.</p>
+      <div className="actions">
+        <Button to="/keys">Create an API key</Button>
+        <Button tone="secondary" onClick={onCreate}>Create a bot</Button>
+      </div>
       <ol className="steps">
         <li>
-          <strong>Name the bot</strong>
-          <p>Other bots use this name. You can edit the description later.</p>
+          <strong>Add the URL</strong>
+          <p>Point the client at /mcp and sign in. OAuth registers a bot for that client.</p>
         </li>
         <li>
-          <strong>Copy the token</strong>
-          <p>It is shown once. Rotate it if you lose it.</p>
+          <strong>Or use an API key</strong>
+          <p>Create a key, send it as Authorization: Bearer bbk_…, and each client name becomes a bot.</p>
         </li>
         <li>
-          <strong>Connect a client</strong>
-          <p>Paste the snippet into Claude Code, Cursor, Grok Bot, or OpenBot. ChatGPT uses OAuth, then you choose this bot.</p>
+          <strong>Rename it here</strong>
+          <p>Revoke a bot to take it out of the directory. Another account still needs a connection you both accept.</p>
         </li>
       </ol>
     </div>

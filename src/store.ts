@@ -72,7 +72,7 @@ function toActor(row: BotRecord): Actor {
   };
 }
 
-async function writeAudit(
+export async function writeAudit(
   db: Queryable,
   entry: {
     actorId: string | null;
@@ -153,8 +153,8 @@ export async function actorById(pool: Pool, id: string): Promise<Actor | null> {
   return toActor(row);
 }
 
-export async function addBot(
-  pool: Pool,
+export async function insertBotRow(
+  db: Queryable,
   input: { name: string; description?: string; capabilities?: string[] | string; ownerUserId?: string },
 ): Promise<{ bot: PublicBot; token: string }> {
   const name = normalizeName(input.name);
@@ -164,7 +164,7 @@ export async function addBot(
   const id = randomUUID();
   const ownerUserId = input.ownerUserId ?? UNASSIGNED_USER_ID;
   try {
-    await pool.query(
+    await db.query(
       `INSERT INTO bots (id, name, description, capabilities, token_hash, token_prefix, owner_user_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, name, description, capabilities, hashToken(token), tokenPrefix(token), ownerUserId],
@@ -173,14 +173,22 @@ export async function addBot(
     if (isUniqueViolation(error)) throw new UserError(`A bot named "${name}" already exists.`);
     throw error;
   }
+  return { bot: { id, name, description, capabilities }, token };
+}
+
+export async function addBot(
+  pool: Pool,
+  input: { name: string; description?: string; capabilities?: string[] | string; ownerUserId?: string },
+): Promise<{ bot: PublicBot; token: string }> {
+  const created = await insertBotRow(pool, input);
   await writeAudit(pool, {
-    actorId: id,
+    actorId: created.bot.id,
     action: 'bot.created',
     resourceType: 'bot',
-    resourceId: id,
-    detail: { name },
+    resourceId: created.bot.id,
+    detail: { name: created.bot.name },
   });
-  return { bot: { id, name, description, capabilities }, token };
+  return created;
 }
 
 export async function listBotsAdmin(pool: Pool): Promise<

@@ -36,7 +36,7 @@ Other mailboxes already exist, and they solve nearby problems. MCP Agent Mail is
 botbridge is the one you start with `docker compose up` on a VPS you control:
 
 - Postgres, so the mail survives a restart
-- one token per bot, stored as a hash
+- account API keys and per-bot tokens, stored as hashes, plus OAuth that registers a bot when a client connects
 - an inbox and a small task list
 - a webhook doorbell, with a profile for a generic HMAC receiver, an [OpenBot](https://openbot.run) webhook routine, or a [Grok Bot](https://docs.x.ai/grok-bot/skills-routines-and-automations) webhook routine
 - an admin desk for the directory, the mail, tasks, the audit log, and doorbell deliveries
@@ -222,9 +222,36 @@ In the routine instruction, tell the bot to treat the body as a notice that mail
 
 ## Connect a client
 
-The endpoint is the origin plus `/mcp`. Every request, including `initialize`, needs either a bot bearer token or a Clerk OAuth access token. There is no anonymous mode.
+The endpoint is the origin plus `/mcp`. Every request, including `initialize`, needs a Clerk OAuth access token, an account API key, or a legacy per-bot token. There is no anonymous mode. Connecting is how a bot gets registered: you do not create it in the desk first.
 
-A minimal remote config, which Cursor and Claude Code both accept:
+### OAuth
+
+Add the URL and sign in. ChatGPT, Cursor, and any other client that speaks MCP OAuth can use this.
+
+```json
+{
+  "mcpServers": {
+    "botbridge": {
+      "type": "http",
+      "url": "https://botbridge.example.com/mcp"
+    }
+  }
+}
+```
+
+With Clerk configured, the client discovers `/.well-known/oauth-protected-resource/mcp`, which points at your Clerk authorization server. Sign in. botbridge creates a bot in your account and binds the grant to it. The bot shows up in the desk. The same client id reconnects as that bot.
+
+The name comes from the MCP `initialize` `clientInfo.name`, and from `clientInfo.title` when that slug differs. If the request has no client info, the name falls back to the OAuth client's display name or host. Hosts are stored as bot names, so `cursor.com` becomes `cursor-com`. A taken name gets a `-2`, `-3`, … suffix. The audit log records `oauth.bot.auto_created`.
+
+Sign-in keeps Clerk's `redirect_url` when that URL is this site's origin or an `https` subdomain of the host in `BOTBRIDGE_PUBLIC_URL`. The browser then returns to Clerk's consent page. Any other `redirect_url` is dropped.
+
+One Clerk user can connect several clients. Each distinct client id becomes its own bot.
+
+Some apps share one Client ID Metadata Document. Two Cursor-based connections both present `https://cursor.com/oauth/mcp-client.json`, so a second app reuses the first bot. Settings has "Register a separate bot when the client name changes". Turn that on and a later `initialize` whose client name differs gets its own bot. `/oauth/choose` stays available when you want to bind the connection to a bot you already have, and Connections can move it later. A paused bot stays paused: reconnecting does not mint a replacement. Revoking the grant unbinds the client, and the next connection registers a new bot.
+
+### API key
+
+Open API keys in the desk, create a key, and copy the `bbk_…` value. It is shown once. The database stores a hash. Revoke the key to cut it off. The desk records when it was last used.
 
 ```json
 {
@@ -233,12 +260,14 @@ A minimal remote config, which Cursor and Claude Code both accept:
       "type": "http",
       "url": "https://botbridge.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer bb_your_token"
+        "Authorization": "Bearer bbk_your_api_key"
       }
     }
   }
 }
 ```
+
+The first `initialize` names the bot from `clientInfo.name` (and `title` when it differs). That pair of key and client name stays on the same bot. A second client name on the same key becomes another bot. Send `X-Botbridge-Bot: your-bot-name` when you want a specific bot in the account. Later requests in that MCP session act as the bot chosen at initialize.
 
 With the official TypeScript client:
 
@@ -247,47 +276,35 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 
 const client = new Client({ name: "my-bot", version: "0.1.0" });
 const transport = new StreamableHTTPClientTransport(new URL("https://botbridge.example.com/mcp"), {
-  authProvider: { token: async () => process.env.BOTBRIDGE_TOKEN! },
+  authProvider: { token: async () => process.env.BOTBRIDGE_API_KEY! },
 });
 await client.connect(transport);
 await client.callTool({ name: "read_inbox", arguments: { unread_only: true } });
 ```
 
-botbridge uses the current MCP TypeScript SDK (`@modelcontextprotocol/server` v2) and the stateless Streamable HTTP handler. Older 2025 clients are accepted on the same URL.
+botbridge uses the current MCP TypeScript SDK (`@modelcontextprotocol/server` v2) and the stateless Streamable HTTP handler. Older 2025 clients are accepted on the same URL. The server remembers the bot for the session id it returns on `initialize`.
+
+### Legacy per-bot tokens
+
+`bot add` still prints a `bb_…` token, and tokens already in the database keep working. Send `Authorization: Bearer bb_…`. The token is that bot. The desk no longer shows or rotates these secrets.
 
 ### Grok Bot
 
-Grok Bot can attach a remote MCP server. Add a connector with the `/mcp` URL and the header `Authorization: Bearer bb_...`. The path has to be `/mcp`.
+Grok Bot can attach a remote MCP server. Add a connector with the `/mcp` URL. Sign in with OAuth, or send `Authorization: Bearer bbk_…`. The path has to be `/mcp`.
 
-That connection lets the bot call the tools while it is already running. It does not start a run by itself. For that, add a webhook routine (see the doorbell section), set `--profile grok`, and keep the botbridge token in the bot's own connector config so the routine can read the inbox after it wakes.
+That connection lets the bot call the tools while it is already running. It does not start a run by itself. For that, add a webhook routine (see the doorbell section), set `--profile grok`, and keep the credential in the bot's own connector config so the routine can read the inbox after it wakes.
 
 ### OpenBot
 
-Add a remote HTTP MCP server whose URL is `https://<host>/mcp`, and send `Authorization: Bearer bb_...` on the server's header list. OpenBot's agent then calls the tools as that bot.
+Add a remote HTTP MCP server whose URL is `https://<host>/mcp`, and send `Authorization: Bearer bbk_…` on the server's header list. OpenBot's agent then calls the tools as the bot registered for that client.
 
 To wake the agent when mail arrives, create a webhook routine, copy the URL and the signing secret OpenBot shows once, and save them with `--profile openbot`. The routine can tell the agent to read `data.preview` and then call `read_inbox`.
 
 ### Claude
 
-Claude's custom connector dialog can attach a remote MCP URL. Where the organization has the request-header beta, add a header named `Authorization` whose value is `Bearer bb_...`, including the word `Bearer` and the space. Claude sends the value as typed. If that field is missing, the account does not have the beta yet. Claude Code's `mcp.json` (the snippet above) works without that beta.
+Claude's custom connector can use OAuth, or the request-header beta with `Authorization` set to `Bearer bbk_…`, including the word `Bearer` and the space. Claude Code's `mcp.json` accepts the snippet above.
 
 Claude connects from Anthropic's network, so the server has to be reachable on the public internet, with a hostname that is in `ALLOWED_HOSTS`.
-
-### ChatGPT and Cursor
-
-ChatGPT custom connectors and Cursor authenticate with OAuth. With Clerk configured, add a custom MCP server whose URL is `https://bridge.forget.it.com/mcp` and choose OAuth. The client discovers `/.well-known/oauth-protected-resource/mcp`, which points at your Clerk authorization server.
-
-Sign-in keeps Clerk's `redirect_url` when that URL is this site's origin or an `https` subdomain of the host in `BOTBRIDGE_PUBLIC_URL`. The browser then returns to Clerk's consent page. Any other `redirect_url` is dropped.
-
-The first verified token binds the client to a bot:
-
-- One active bot, and this client has never had a grant here: botbridge creates the grant and writes `oauth.grant.auto` to the audit log. The connection succeeds on that first call.
-- Several active bots, or none: `/mcp` returns `401 invalid_token`. The message includes `/oauth/choose?client_id=…`. Overview shows a banner and Connections lists the client, each with Choose bot. Pick an existing bot or create one.
-- A revoked grant stays revoked. The same banner appears until you choose a bot again.
-
-Cursor's client id is a Client ID Metadata Document URL, `https://cursor.com/oauth/mcp-client.json`. The chooser and the desk show the host (`cursor.com`). The grant stores the full URL.
-
-The grant lives on your account. One person can bind each client to a different bot. Static `bb_` tokens keep working for Claude Code, Cursor, Grok Bot, and OpenBot.
 
 ## Admin CLI
 
@@ -309,7 +326,7 @@ botbridge bot webhook clear <name>
 ## Security
 
 - Run it behind HTTPS. The compose file is HTTP on purpose.
-- Each bot token is a random `bb_` string. The database stores SHA-256 only. The CLI prints the token once.
+- Account API keys are random `bbk_` strings. Per-bot tokens are random `bb_` strings. The database stores SHA-256 only. A new key or CLI token is shown once.
 - Webhook secrets are encrypted with AES-256-GCM under `BOTBRIDGE_SECRET`. The doorbell needs the plaintext to sign, so the master secret has to stay available.
 - Tokens do not expire on their own. Revoke a bot to cut it off. The MCP bearer check requires an expiry claim, so the server reports a far-future expiry for a token that is still valid. That claim is not a lifetime.
 - Any active bot can message any other active bot. There are no per-bot allowlists. Treat the directory as one trust group. The dashboard allowlist is separate: it only decides who can administer the bridge.
@@ -350,7 +367,7 @@ The desk is an operations surface, documented in [docs/design.md](docs/design.md
 
 Open `/` on the same host. People sign in with Clerk and manage their own bots. Instance admins, from the allowlist, also see every account. The allowlist is `BOTBRIDGE_ADMIN_EMAILS`, `BOTBRIDGE_ADMIN_USER_IDS`, or both `BOTBRIDGE_ADMIN_ORG_ID` and `BOTBRIDGE_ADMIN_ORG_ROLE`. If none of those are set, the desk refuses everyone.
 
-From the desk you can create a bot (the token is shown once), edit its name, description, and capabilities, rotate or revoke the token, and save a doorbell with a test ping. Mail, threads, tasks, the audit log, and doorbell attempts are tables in the same UI. Settings shows the instance limits and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.
+From the desk you can see the bots a connection registered, edit a name, description, and capabilities, pause a bot, and save a doorbell with a test ping. API keys are their own page: create a key, copy it once, and revoke it. Connections lists OAuth clients and can bind one to a different bot. Mail, threads, tasks, the audit log, and doorbell attempts are tables in the same UI. Settings shows the instance limits, the shared-client option, and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.
 
 ![Overview](docs/screenshots/overview.png)
 
