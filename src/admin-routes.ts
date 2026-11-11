@@ -29,7 +29,7 @@ import {
   setWebhook,
   updateBotById,
 } from './store.js';
-import { createApiKey, listApiKeys, revokeApiKey } from './registration.js';
+import { createApiKey, decideRegistrationRequest, listApiKeys, listRegistrationRequests, revokeApiKey } from './registration.js';
 import {
   bindOAuthGrant,
   createInvite,
@@ -266,6 +266,35 @@ export function adminRouter(deps: Deps): Router {
     const account = current(res);
     await revokeOAuthGrant(deps.pool, account.id, req.params.id, account.isAdmin);
     res.json({ ok: true });
+  });
+
+  router.get('/registrations', async (req, res) => {
+    const account = current(res);
+    const owner = req.query.all === '1' && account.isAdmin ? null : account.id;
+    const status = req.query.status === 'all' ? 'all' : 'pending';
+    res.json({ requests: await listRegistrationRequests(deps.pool, owner, { status }) });
+  });
+
+  router.post('/registrations/:id/approve', async (req, res) => {
+    const account = current(res);
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? (req.body as Record<string, unknown>) : {};
+    const result = await decideRegistrationRequest(deps.pool, {
+      id: req.params.id,
+      userId: account.id,
+      decision: 'approve',
+      name: optionalString(body, 'name'),
+    });
+    res.json(result);
+  });
+
+  router.post('/registrations/:id/decline', async (req, res) => {
+    const account = current(res);
+    const result = await decideRegistrationRequest(deps.pool, {
+      id: req.params.id,
+      userId: account.id,
+      decision: 'decline',
+    });
+    res.json(result);
   });
 
   router.get('/oauth/pending', async (_req, res) => {

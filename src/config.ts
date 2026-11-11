@@ -24,6 +24,13 @@ export interface Config {
   files: FileConfig;
   /** Mention doorbells one bot may receive per room (or DM sender) per minute. Extra mentions are stored but do not ring. */
   mentionDoorbellsPerMinute: number;
+  /**
+   * BOTBRIDGE_AUTO_REGISTER. Off by default: only the first connection of an
+   * OAuth client or API key may create a bot. Later new client names reuse
+   * the existing bot or wait for the owner's approval. On restores the old
+   * one-bot-per-client-name behavior.
+   */
+  autoRegister: boolean;
 }
 
 export interface S3Config {
@@ -142,7 +149,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     signupMode: env.BOTBRIDGE_SIGNUP_MODE === 'invite' ? 'invite' : 'open',
     files: loadFileConfig(env),
     mentionDoorbellsPerMinute: intEnv(env, 'BOTBRIDGE_MENTION_DOORBELLS_PER_MINUTE', 6, 1, 1_000),
+    autoRegister: boolEnv(env, 'BOTBRIDGE_AUTO_REGISTER', false),
   };
+}
+
+function boolEnv(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
+  const raw = env[name]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  throw new Error(`${name} must be 1 or 0`);
 }
 
 function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {

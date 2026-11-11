@@ -9,11 +9,16 @@ import type { OAuthVerifier } from './identity.js';
 import type { Pool } from './db.js';
 import { TOKEN_LIFETIME_SECONDS } from './limits.js';
 import { mcpRequestStore } from './mcp-request.js';
-import { connectContext, resolveApiKeyConnection, resolveOAuthConnection } from './registration.js';
+import { connectContext, resolveApiKeyConnection, resolveOAuthConnection, type RegistrationPolicy } from './registration.js';
 import { accountIdForClerk } from './tenancy.js';
 import { authenticateBot, type Actor } from './store.js';
 
-export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = null, selectionUrl?: string | null): OAuthTokenVerifier {
+export function createTokenVerifier(
+  pool: Pool,
+  oauth: OAuthVerifier | null = null,
+  selectionUrl?: string | null,
+  policy: RegistrationPolicy = { autoRegister: false },
+): OAuthTokenVerifier {
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
       if (token.startsWith('bb_')) {
@@ -24,7 +29,7 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
       try {
         const ctx = currentConnectContext();
         if (token.startsWith('bbk_')) {
-          const resolved = await resolveApiKeyConnection(pool, token, ctx);
+          const resolved = await resolveApiKeyConnection(pool, token, ctx, policy);
           return botAuth(
             token,
             resolved.actor,
@@ -40,7 +45,7 @@ export function createTokenVerifier(pool: Pool, oauth: OAuthVerifier | null = nu
         const accountId = await accountIdForClerk(pool, profile.userId, profile.email);
         if (!accountId) throw new UserError('Sign in on the botbridge dashboard before using OAuth.');
         const clientId = (profile.clientId || 'default').trim() || 'default';
-        const resolved = await resolveOAuthConnection(pool, accountId, clientId, ctx, selectionUrl ?? null);
+        const resolved = await resolveOAuthConnection(pool, accountId, clientId, ctx, selectionUrl ?? null, policy);
         const info = botAuth(
           token,
           resolved.actor,

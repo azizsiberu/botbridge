@@ -269,7 +269,7 @@ export function createBotbridgeHandler(deps: { pool: Pool; config: Config; stora
         'request_connection',
         {
           title: 'Request connection',
-          description: 'Ask another account to connect. kind=account links every bot on both accounts. kind=bot links only you and one named bot. The other person approves or declines in the dashboard.',
+          description: 'Ask another account to connect. kind=account links the bots both accounts have when it is approved (bots created later need their own kind=bot link). kind=bot links only you and one named bot. The other person approves or declines in the dashboard.',
           inputSchema: z.object({
             kind: z.enum(['account', 'bot']).describe('account links both accounts. bot links only this bot and one other bot.'),
             email: z.string().email().nullish().describe('Required for kind=account. The other person\'s email.'),

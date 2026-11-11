@@ -184,15 +184,23 @@ export async function canReach(pool: Pool, actor: Actor, target: { id: string; o
   }
   const targetOwner = await pool.query<{ status: string }>(`SELECT status FROM users WHERE id = $1`, [target.owner_user_id]);
   if (targetOwner.rows[0]?.status !== 'active') return false;
+  // An account connection covers the bots both accounts had when it was
+  // approved (plus bots flagged account_links, which is every bot from before
+  // this rule). A bot created later needs its own approval.
   const link = await pool.query(
-    `SELECT 1 FROM connections
-     WHERE status = 'active'
+    `SELECT 1
+     FROM connections c
+     JOIN bots ab ON ab.id = $3
+     JOIN bots tb ON tb.id = $4
+     WHERE c.status = 'active'
        AND (
-         (kind = 'account' AND (
-            (from_user_id = $1 AND to_user_id = $2) OR (from_user_id = $2 AND to_user_id = $1)
-         ))
-         OR (kind = 'bot' AND (
-            (from_bot_id = $3 AND to_bot_id = $4) OR (from_bot_id = $4 AND to_bot_id = $3)
+         (c.kind = 'account' AND (
+            (c.from_user_id = $1 AND c.to_user_id = $2) OR (c.from_user_id = $2 AND c.to_user_id = $1)
+         )
+         AND (ab.account_links OR ab.created_at <= coalesce(c.decided_at, c.created_at))
+         AND (tb.account_links OR tb.created_at <= coalesce(c.decided_at, c.created_at)))
+         OR (c.kind = 'bot' AND (
+            (c.from_bot_id = $3 AND c.to_bot_id = $4) OR (c.from_bot_id = $4 AND c.to_bot_id = $3)
          ))
        )
      LIMIT 1`,
@@ -227,9 +235,12 @@ export async function reachableBots(pool: Pool, actor: Actor): Promise<Reachable
          OR b.owner_user_id = $2
          OR EXISTS (
            SELECT 1 FROM connections c
+           JOIN bots ab ON ab.id = $1
            WHERE c.status = 'active' AND c.kind = 'account'
              AND ((c.from_user_id = $2 AND c.to_user_id = b.owner_user_id)
                OR (c.to_user_id = $2 AND c.from_user_id = b.owner_user_id))
+             AND (ab.account_links OR ab.created_at <= coalesce(c.decided_at, c.created_at))
+             AND (b.account_links OR b.created_at <= coalesce(c.decided_at, c.created_at))
          )
          OR EXISTS (
            SELECT 1 FROM connections c

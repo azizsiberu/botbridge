@@ -13,6 +13,7 @@ import {
   setWebhook,
   updateBot,
 } from './store.js';
+import { decideRegistrationRequest, listRegistrationRequests } from './registration.js';
 import { VERSION } from './version.js';
 
 const USAGE = `botbridge ${VERSION}
@@ -27,6 +28,9 @@ Usage:
   botbridge bot revoke <name>
   botbridge bot webhook set <name> --url <url> --profile <generic|openbot|grok> [--secret <secret>]
   botbridge bot webhook clear <name>
+  botbridge registration list [--all]
+  botbridge registration approve <request-id> [--name <bot-name>]
+  botbridge registration decline <request-id>
 
 Environment:
   DATABASE_URL              Postgres connection string
@@ -35,6 +39,9 @@ Environment:
   HOST                      Default 0.0.0.0
   ALLOWED_HOSTS             Comma-separated Host header allowlist
   RATE_LIMIT_PER_MINUTE     Tool calls per bot token. Default 120
+  BOTBRIDGE_AUTO_REGISTER   1 lets every new client name mint a bot. Default 0:
+                            only a client's first connection may, the rest wait
+                            for approval (registration list/approve).
 `;
 
 function flag(args: string[], name: string): string | undefined {
@@ -157,6 +164,35 @@ async function botCommand(args: string[]): Promise<void> {
 
   throw new UserError('Unknown bot command. Run botbridge --help.');
 }
+async function registrationCommand(args: string[]): Promise<void> {
+  const action = args.shift();
+  if (action === 'list') {
+    const all = args.includes('--all');
+    const rest = args.filter((arg) => arg !== '--all');
+    if (rest.length > 0) throw new UserError(`Unexpected argument: ${rest[0]}`);
+    const rows = await withDb((pool) => listRegistrationRequests(pool, null, { status: all ? 'all' : 'pending' }));
+    if (rows.length === 0) {
+      process.stdout.write(all ? 'No registration requests.\n' : 'No pending registration requests.\n');
+      return;
+    }
+    for (const row of rows) {
+      process.stdout.write(
+        `${row.id}\t${row.status}\t${row.requested_name}\towner ${row.owner.display_name}\t${row.kind} ${row.client}\ttries ${row.attempts}\tlast ${row.last_seen_at}${row.bot ? `\tbot ${row.bot.name}` : ''}\n`,
+      );
+    }
+    return;
+  }
+  if (action === 'approve' || action === 'decline') {
+    const id = args.shift();
+    if (!id || id.startsWith('--')) throw new UserError(`registration ${action} needs a request id`);
+    const name = action === 'approve' ? flag(args, '--name') : undefined;
+    if (args.length > 0) throw new UserError(`Unexpected argument: ${args[0]}`);
+    const result = await withDb((pool) => decideRegistrationRequest(pool, { id, userId: null, decision: action, name }));
+    process.stdout.write(result.bot ? `approved, bot ${result.bot.name} (${result.bot.id})\n` : 'declined\n');
+    return;
+  }
+  throw new UserError('Use: registration list|approve|decline. Run botbridge --help.');
+}
 
 async function main(argv: string[]): Promise<void> {
   const [command, ...rest] = argv;
@@ -190,6 +226,10 @@ async function main(argv: string[]): Promise<void> {
   }
   if (command === 'bot') {
     await botCommand(rest);
+    return;
+  }
+  if (command === 'registration') {
+    await registrationCommand(rest);
     return;
   }
   throw new UserError(`Unknown command "${command}". Run botbridge --help.`);

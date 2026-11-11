@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection, type Grant } from '../api';
 import { Button, DataTable, Empty, ErrorNote, Loading, PageTitle, Status, time } from '../ui';
-import { PendingOAuthClients } from './PendingOAuth';
+import { PendingBotRequests, PendingOAuthClients } from './PendingOAuth';
 
 export function ConnectionsPage() {
   const [rows, setRows] = useState<Connection[] | null>(null);
@@ -30,9 +30,10 @@ export function ConnectionsPage() {
     <div>
       <PageTitle
         title="Connections"
-        lede="Your own bots can already talk. A link to another account starts as a request. Nothing is shared until they approve, and either of you can revoke it."
+        lede="Your own bots can already talk. A link to another account starts as a request. Nothing is shared until they approve, and either of you can revoke it. An account link covers the bots both accounts have when it is approved; a bot added later needs its own bot link."
       />
       {error ? <ErrorNote message={error} /> : null}
+      <PendingBotRequests onChange={load} />
       <PendingOAuthClients presentation="section" onLoaded={setWaiting} />
       <OAuthGrants grants={grants} onRevoke={load} onError={setError} />
       {!rows && !error ? <Loading label="Loading connections." /> : null}

@@ -7,12 +7,12 @@ const future = Math.floor(Date.now() / 1000) + 3600;
 const cursorClientId = 'https://cursor.com/oauth/mcp-client.json';
 const grokClientId = 'https://grok.example/oauth/mcp-client.json';
 
-describe('oauth registration', () => {
+describe('oauth registration with BOTBRIDGE_AUTO_REGISTER=1', () => {
   let app: TestServer;
 
   beforeAll(async () => {
     app = await listenForTests(
-      { publicUrl: 'http://127.0.0.1:8799' },
+      { publicUrl: 'http://127.0.0.1:8799', autoRegister: true },
       {
         oauth: {
           async verifyAccessToken(token) {
@@ -295,12 +295,12 @@ describe('oauth registration', () => {
   });
 });
 
-describe('account API keys', () => {
+describe('account API keys with BOTBRIDGE_AUTO_REGISTER=1', () => {
   let app: TestServer;
 
   beforeAll(async () => {
     app = await listenForTests(
-      { publicUrl: 'http://127.0.0.1:8799', adminEmails: ['ada@example.com'] },
+      { publicUrl: 'http://127.0.0.1:8799', adminEmails: ['ada@example.com'], autoRegister: true },
       {
         adminAuth: {
           async verifySession(token) {

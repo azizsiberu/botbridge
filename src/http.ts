@@ -131,7 +131,7 @@ export function createApp(deps: AppDeps) {
     ? `${config.publicUrl}/.well-known/oauth-protected-resource/mcp`
     : undefined;
   const selectionUrl = config.publicUrl ? `${config.publicUrl}/oauth/choose` : null;
-  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth, selectionUrl), resourceMetadataUrl });
+  const auth = requireBearerAuth({ verifier: createTokenVerifier(pool, oauth, selectionUrl, { autoRegister: config.autoRegister }), resourceMetadataUrl });
 
   // /mcp/b/<bot-name> picks the bot from the URL, like X-Botbridge-Bot, for clients that cannot set headers
   // or that all look identical (several Grok Bots on one Clerk account). The token audience stays /mcp.
