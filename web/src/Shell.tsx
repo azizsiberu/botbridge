@@ -10,11 +10,25 @@ const links = [
   ['/tasks', 'Tasks'], ['/doorbell', 'Deliveries'], ['/settings', 'Settings'],
   ['/overview', 'Overview'], ['/connections', 'Connections'], ['/keys', 'API keys'], ['/audit', 'Audit'],
 ] as const;
-function Nav({ items, onNavigate }: { items: ReadonlyArray<readonly [string, IconName]>; onNavigate?: () => void }) {
+function Nav({
+  items,
+  account,
+  onNavigate,
+}: {
+  items: ReadonlyArray<readonly [string, IconName]>;
+  account?: string | null;
+  onNavigate?: () => void;
+}) {
   return (
     <nav aria-label="Desk">
+      {account ? (
+        <div className="nav-item">
+          <Icon name="Profile" />
+          <span>{account}</span>
+        </div>
+      ) : null}
       {items.map(([to, label]) => (
-        <NavLink key={to} to={to} end={to === '/'} onClick={onNavigate}>
+        <NavLink key={to} className="nav-item" to={to} end={to === '/'} onClick={onNavigate}>
           <Icon name={label} /><span>{label}</span>
         </NavLink>
       ))}
@@ -22,12 +36,13 @@ function Nav({ items, onNavigate }: { items: ReadonlyArray<readonly [string, Ico
   );
 }
 
-function SignOutButton({ onSignOut }: { onSignOut: () => void | Promise<void> }) {
+function SignOutButton({ onSignOut, nav = false }: { onSignOut: () => void | Promise<void>; nav?: boolean }) {
   const [pending, setPending] = useState(false);
+  const label = pending ? 'Signing out' : 'Sign out';
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className={nav ? 'nav-item' : 'theme-toggle'}
       disabled={pending}
       aria-busy={pending}
       onClick={() => {
@@ -35,7 +50,8 @@ function SignOutButton({ onSignOut }: { onSignOut: () => void | Promise<void> })
         void Promise.resolve(onSignOut()).catch(() => setPending(false));
       }}
     >
-      {pending ? 'Signing out' : 'Sign out'}
+      {nav ? <Icon name="Sign out" /> : null}
+      <span>{label}</span>
     </button>
   );
 }
@@ -61,23 +77,22 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
       </header>
       {open ? (
         <div className="mobile-nav">
-          <Nav items={items} onNavigate={() => setOpen(false)} />
+          <Nav items={items} account={account?.displayName} onNavigate={() => setOpen(false)} />
           <div className="spine-foot">
-            <ThemeButton />
+            <ThemeButton nav />
           </div>
         </div>
       ) : null}
       <div className="shell">
         <aside className="spine">
           <div className="spine-brand">
-            <strong><Icon name="Brand" /> botbridge</strong>
-            <span>v{version}</span>
-            {account ? <span className="spine-account">{account.displayName}</span> : null}
+            <strong className="nav-brand"><Icon name="Brand" /> <span>botbridge</span></strong>
+            <p className="nav-version">v{version}</p>
           </div>
-          <Nav items={items} />
+          <Nav items={items} account={account?.displayName} />
           <div className="spine-foot">
-            <ThemeButton />
-            {onSignOut ? <SignOutButton onSignOut={onSignOut} /> : null}
+            <ThemeButton nav />
+            {onSignOut ? <SignOutButton nav onSignOut={onSignOut} /> : null}
           </div>
         </aside>
         <main className="main">

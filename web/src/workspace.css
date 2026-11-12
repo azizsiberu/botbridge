@@ -1,6 +1,6 @@
 .ws-layout {
   display: grid;
-  grid-template-columns: 210px minmax(0, 760px);
+  grid-template-columns: 248px minmax(0, 760px);
   gap: 16px;
   max-width: 1920px;
   margin: auto;
@@ -15,7 +15,7 @@
   flex-direction: column;
 }
 .ws-nav {
-  overflow: auto;
+  overflow: hidden;
   padding: 16px 12px 24px 0;
   gap: 16px;
 }
@@ -30,27 +30,14 @@
 .ws-mobile-menu {
   display: grid;
   gap: 4px;
+  align-content: start;
 }
-.ws-nav nav a,
-.ws-mobile-menu a {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  color: var(--ink);
-  text-decoration: none;
-  border-radius: 12px;
+.ws-nav nav {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
-.ws-nav nav a[aria-current='page'],
-.ws-mobile-menu a[aria-current='page'] {
-  background: var(--line);
-}
-.ws-nav details,
-.ws-mobile-menu details {
-  margin-top: 12px;
-  color: var(--muted);
-}
-.ws-layout summary {
+.ws-layout summary:not(.nav-item) {
   cursor: pointer;
   padding: 8px 0;
 }
@@ -237,7 +224,7 @@
 }
 @media (min-width: 1200px) {
   .ws-home {
-    grid-template-columns: 200px minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1.4fr) minmax(0, 1fr);
   }
   .ws-side {
     display: flex;
@@ -245,7 +232,7 @@
 }
 @media (min-width: 1440px) {
   .ws-home {
-    grid-template-columns: 220px repeat(3, minmax(0, 1fr));
+    grid-template-columns: 248px repeat(3, minmax(0, 1fr));
   }
   .ws-identity {
     display: flex;
@@ -253,11 +240,8 @@
 }
 @media (min-width: 768px) and (max-width: 1199px) {
   .ws-layout {
-    grid-template-columns: 150px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
     gap: 10px;
-  }
-  .ws-nav nav a {
-    gap: 8px;
   }
 }
 @media (max-width: 767px) {
@@ -338,8 +322,6 @@
   }
 }
 
-.ws-brand,
-.spine-brand strong:has(svg),
 .topbar strong:has(svg) {
   display: inline-flex;
   align-items: center;

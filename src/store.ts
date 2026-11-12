@@ -104,8 +104,8 @@ export async function enqueueDoorbell(
   db: Queryable,
   recipient: BotRecord,
   notice: Omit<DoorbellNotice, 'id' | 'occurred_at' | 'bot'>,
-): Promise<void> {
-  if (!recipient.webhook_url || !recipient.webhook_profile || !recipient.webhook_secret_enc) return;
+): Promise<boolean> {
+  if (!recipient.webhook_url || !recipient.webhook_profile || !recipient.webhook_secret_enc) return false;
   const id = randomUUID();
   const full: DoorbellNotice = {
     id,
@@ -118,6 +118,7 @@ export async function enqueueDoorbell(
      VALUES ($1, $2, $3, $4)`,
     [id, recipient.id, full.type, renderDoorbellBody(recipient.webhook_profile, full)],
   );
+  return true;
 }
 
 export const BOT_SELECT = `b.id, b.name, b.description, b.capabilities, b.webhook_url, b.webhook_secret_enc, b.webhook_profile, b.revoked_at, b.token_prefix, b.created_at, b.updated_at, b.owner_user_id, u.display_name AS owner_name, u.status AS owner_status`;
@@ -436,6 +437,8 @@ export interface SentMessage {
   /** The recipient was @mentioned. Other names in the text are ignored: a DM only reaches its recipient. */
   mentioned: boolean;
   mentions_ignored: string[];
+  /** False when the recipient has no webhook URL, profile, and secret, so nothing will wake it. */
+  doorbell: boolean;
 }
 
 export async function sendMessage(
@@ -452,7 +455,7 @@ export async function sendMessage(
   const files = await resolveAttachments(pool, actor.id, input.attachments);
   const mentions = parseMentions(text);
   const mentioned = mentions.includes(recipient.name);
-  const createdAt = await withTx(pool, async (client) => {
+  const saved = await withTx(pool, async (client) => {
     const inserted = await client.query<{ created_at: Date }>(
       `INSERT INTO messages (id, thread_id, from_bot_id, to_bot_id, kind, body)
        VALUES ($1, $2, $3, $4, 'direct', $5)
@@ -474,7 +477,7 @@ export async function sendMessage(
       },
     });
     await insertAttachments(client, 'message_attachments', id, files);
-    await enqueueDoorbell(client, recipient, {
+    const doorbell = await enqueueDoorbell(client, recipient, {
       type: 'message.created',
       from: { id: actor.id, name: actor.name },
       resource: { type: 'message', id },
@@ -483,17 +486,18 @@ export async function sendMessage(
       ...(mentioned ? { mentioned: true } : {}),
       ...(files.length > 0 ? { attachments: files.length } : {}),
     });
-    return inserted.rows[0]?.created_at;
+    return { createdAt: inserted.rows[0]?.created_at, doorbell };
   });
-  if (!createdAt) throw new Error('insert did not return a row');
+  if (!saved.createdAt) throw new Error('insert did not return a row');
   return {
     id,
     thread_id: threadId,
     to: publicBot(recipient),
-    created_at: createdAt.toISOString(),
+    created_at: saved.createdAt.toISOString(),
     attachments: files,
     mentioned,
     mentions_ignored: mentions.filter((name) => name !== recipient.name && name !== actor.name),
+    doorbell: saved.doorbell,
   };
 }
 
