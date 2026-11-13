@@ -81,10 +81,32 @@ content, and reduced-motion preferences disable transitions.
 
 ## Preview
 
-Current Home shows all bot conversations without an active-bot filter. These screenshots use sample bots in a disposable local database.
+These screenshots document the account-wide Home revision with sample bots in a disposable local database. The current loading states and brand are specified below.
 
 ![All conversations on desktop](screenshots/frontend-workspace.png)
 
 ![All conversations on mobile](screenshots/frontend-mobile.png)
 
 ![Compose after choosing a sender](screenshots/frontend-compose.png)
+
+## Loading and feedback
+
+Startup, session checks, route loading and data refresh use the shared brand,
+spinner and row skeletons. Inline panels use the compact variant. Loading never
+stands in for an empty response or a failed request. Read errors offer a retry;
+forms and action buttons show pending work and block duplicate submissions.
+Reduced-motion preferences stop spinner and skeleton animation. The complete
+state inventory and validation scope are in [frontend-states.md](frontend-states.md).
+
+## Brand
+
+The mark links two lowercase b forms into one bridge. Its geometry lives in
+`web/src/brand/mark.json` and is shared by the inline app mark and generated icon
+assets. The app uses the current ink color; browser and installation icons put
+the white mark on the dark field.
+
+`web/public/` contains SVG and ICO favicons, a 32px PNG fallback, the 180px Apple
+touch icon, 192/512px installation icons, a 512px maskable icon, and the web app
+manifest. After editing the geometry, run `npm run assets:brand --prefix web`
+with Playwright Chromium installed (or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`).
+Generated assets are committed, so normal production builds do not need a browser.

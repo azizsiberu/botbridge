@@ -1,12 +1,41 @@
+import { BrandMark } from './components/BrandMark';
 import {
-  Bell, Bot, CircleDot, ClipboardList, Hash, Heart, House, KeyRound,
-  LayoutDashboard, LogOut, Mail, Menu, Moon, Network, Plus, ScrollText, Search,
-  Send, Settings, ShieldCheck, SquarePen, Sun, UserRound, X,
+  Bell,
+  Bot,
+  ClipboardList,
+  Hash,
+  Heart,
+  House,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  Menu,
+  Moon,
+  Network,
+  Plus,
+  ScrollText,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  SquarePen,
+  Sun,
+  UserRound,
+  X,
 } from 'lucide-react';
 
 export function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   const hue = Array.from(name).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) % 360, 0);
-  return <span style={{backgroundColor: 'hsl(' + hue + ' 23% 23%)',color:'#fff'}} className={`bot-avatar${large ? ' large' : ''}`} aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>;
+  return (
+    <span
+      style={{ backgroundColor: 'hsl(' + hue + ' 23% 23%)', color: '#fff' }}
+      className={`bot-avatar${large ? ' large' : ''}`}
+      aria-hidden="true"
+    >
+      {name.slice(0, 2).toUpperCase()}
+    </span>
+  );
 }
 
 const icons = {
@@ -20,7 +49,7 @@ const icons = {
   Profile: UserRound,
   Compose: SquarePen,
   Create: Plus,
-  Brand: CircleDot,
+  Brand: BrandMark,
   Menu,
   Close: X,
   Settings,

@@ -10,6 +10,9 @@ export function currentTheme(): ThemeName {
 export function applyTheme(theme: ThemeName): void {
   document.documentElement.classList.toggle('dark', theme === 'dark');
   localStorage.setItem('botbridge-theme', theme);
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', theme === 'dark' ? '#101010' : '#e4ebf0');
   window.dispatchEvent(new Event('botbridge-theme'));
 }
 

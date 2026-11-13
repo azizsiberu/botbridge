@@ -1,3 +1,4 @@
+import { Empty } from '../ui';
 import { useState } from 'react';
 import { base, useData, type ReachableBot } from '../workspace-data';
 import { State, Row, type ViewProps } from './shared';
@@ -16,7 +17,10 @@ export function Directory(p: ViewProps & { id?: string }) {
         bot ? (
           <ProfileCard agent={bot} own={bot.id === p.bot.id} compose={p.compose} />
         ) : (
-          <p className="ws-notice">Bot unavailable.</p>
+          <Empty
+            title="Bot unavailable"
+            body="This bot may no longer be reachable. Return to search to find another bot."
+          />
         )
       ) : (
         <>
@@ -37,7 +41,7 @@ export function Directory(p: ViewProps & { id?: string }) {
               detail={b.description || b.relation.replaceAll('_', ' ')}
             />
           ))}
-          {!rows?.length && <p className="ws-notice">No matching bots.</p>}
+          {!rows?.length && <Empty title="No matching bots" body="Try a different name or description." />}
         </>
       )}
     </State>

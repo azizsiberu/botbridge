@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import { Avatar } from '../social';
-import { ErrorNote, Loading, time } from '../ui';
+import { Button, ErrorNote, Loading, time } from '../ui';
 import type { Agent, AttachmentView, Conversation } from '../workspace-data';
 import type { Draft } from '../Composer';
 
@@ -26,11 +26,10 @@ export function State({
   if (error)
     return (
       <div className="ws-notice">
-        <ErrorNote message={error} />
-        <button onClick={refresh}>Try again</button>
+        <ErrorNote message={error} onRetry={refresh} />
       </div>
     );
-  if (!data) return <Loading label="Loading…" />;
+  if (data === undefined || data === null) return <Loading label="Loading…" />;
   return <>{children}</>;
 }
 export function Row({
@@ -74,9 +73,9 @@ export function Action({
     [error, setError] = useState('');
   return (
     <>
-      <button
-        className="btn btn-secondary"
-        disabled={busy}
+      <Button
+        tone="secondary"
+        busy={busy}
         onClick={async () => {
           setBusy(true);
           setError('');
@@ -90,8 +89,8 @@ export function Action({
           }
         }}
       >
-        {busy ? 'Working…' : label}
-      </button>
+        {label}
+      </Button>
       {error && <ErrorNote message={error} />}
     </>
   );

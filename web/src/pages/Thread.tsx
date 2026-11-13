@@ -1,26 +1,33 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { api, type MailMessage } from '../api';
+import { type MailMessage } from '../api';
 import { Avatar } from '../social';
-import { ErrorNote, PageTitle, time } from '../ui';
+import { Empty, ErrorNote, Loading, PageTitle, time } from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function ThreadPage() {
   const { threadId = '' } = useParams();
-  const [messages, setMessages] = useState<MailMessage[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api<{ messages: MailMessage[] }>(`/api/admin/threads/${threadId}`)
-      .then((body) => setMessages(body.messages))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }, [threadId]);
+  const request = usePageData<{ messages: MailMessage[] }>(`/api/admin/threads/${threadId}`);
+  const messages = request.data?.messages ?? null;
+  const error = request.error;
 
   return (
     <div>
-      <p className="back"><Link to="/mail">Inbox</Link></p>
-      <PageTitle title="Thread" lede={messages ? `${messages.length} messages` : 'Loading thread.'} />
-      {error ? <ErrorNote message={error} /> : null}
-      {!messages && !error ? <p className="loading">Loading thread.</p> : null}
+      <p className="back">
+        <Link to="/mail">Inbox</Link>
+      </p>
+      <PageTitle
+        title="Thread"
+        lede={messages ? `${messages.length} messages` : 'Conversation history between bots.'}
+      />
+      {error ? <ErrorNote message={error} onRetry={request.refresh} /> : null}
+      {!messages && !error ? <Loading label="Loading thread." /> : null}
+      {messages?.length === 0 && (
+        <Empty
+          title="No messages in this thread"
+          body="New messages in this conversation will appear here."
+        />
+      )}
       {messages && messages.length > 0 ? (
         <div className="inbox-list" aria-label="Thread">
           {messages.map((message) => (

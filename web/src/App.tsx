@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { allowedRedirectUrl, withRedirect, withoutRedirectParam } from '../../src/redirect';
 import { publicConfig, setTokenGetter, type PublicConfig } from './api';
 import { Shell } from './Shell';
+import { AppLoading, Button } from './ui';
 import { Icon } from './social';
 import { clerkAppearance, ThemeButton, useTheme } from './theme';
 import { AuditPage } from './pages/Audit';
@@ -25,13 +26,36 @@ export function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [theme] = useTheme();
+  const [attempt, retry] = useState(0);
 
   useEffect(() => {
-    publicConfig().then(setConfig).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to start'));
-  }, []);
+    const controller = new AbortController();
+    publicConfig(controller.signal)
+      .then(setConfig)
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed to start');
+      });
+    return () => controller.abort();
+  }, [attempt]);
 
-  if (error) return <Centered title="botbridge is not answering" body={error} />;
-  if (!config) return <Centered title="botbridge" body="Loading." />;
+  if (error)
+    return (
+      <Centered
+        title="botbridge is not answering"
+        body={error}
+        action={
+          <Button
+            onClick={() => {
+              setError(null);
+              retry((value) => value + 1);
+            }}
+          >
+            Try again
+          </Button>
+        }
+      />
+    );
+  if (!config) return <AppLoading />;
   if (config.devAuth) return <DevDesk version={config.version} />;
   if (!config.clerkPublishableKey) {
     return (
@@ -42,7 +66,12 @@ export function App() {
     );
   }
   return (
-    <ClerkProvider publishableKey={config.clerkPublishableKey} signInUrl="/sign-in" signUpUrl="/sign-up" appearance={clerkAppearance(theme)}>
+    <ClerkProvider
+      publishableKey={config.clerkPublishableKey}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      appearance={clerkAppearance(theme)}
+    >
       <ClerkGate version={config.version} publicUrl={config.publicUrl} />
     </ClerkProvider>
   );
@@ -68,7 +97,7 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
     if (leaveForRedirect && redirectUrl) window.location.replace(redirectUrl);
   }, [leaveForRedirect, redirectUrl]);
 
-  if (!isLoaded) return <Centered title="botbridge" body="Checking your Clerk session." />;
+  if (!isLoaded) return <AppLoading label="Checking your session…" />;
   if (!isSignedIn) {
     if (onAuthScreen && rawRedirect && !redirectUrl) {
       return <Navigate to={withoutRedirectParam(location.pathname, location.search)} replace />;
@@ -86,7 +115,9 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
       <div className="auth">
         <div className="auth-card">
           <div className="auth-top">
-            <p className="brand"><Icon name="Brand" /> botbridge</p>
+            <p className="brand">
+              <Icon name="Brand" /> botbridge
+            </p>
             <ThemeButton />
           </div>
           <p className="lede">{lede}</p>
@@ -110,10 +141,16 @@ function ClerkGate({ version, publicUrl }: { version: string; publicUrl: string 
     );
   }
   if (onAuthScreen) {
-    if (redirectUrl) return <Centered title="botbridge" body="Sending you back to finish connecting." />;
+    if (redirectUrl) return <AppLoading label="Finishing your connection…" />;
     return <Navigate to="/" replace />;
   }
-  return <Desk key={userId} version={version} onSignOut={() => signOut({ redirectUrl: `${window.location.origin}/sign-in` })} />;
+  return (
+    <Desk
+      key={userId}
+      version={version}
+      onSignOut={() => signOut({ redirectUrl: `${window.location.origin}/sign-in` })}
+    />
+  );
 }
 
 function DevDesk({ version }: { version: string }) {
@@ -123,7 +160,8 @@ function DevDesk({ version }: { version: string }) {
 
 function Desk({ version, onSignOut }: { version: string; onSignOut?: () => void | Promise<void> }) {
   const location = useLocation();
-  if (/^\/(?:$|(?:messages|rooms|work|search|activity|profile)(?:\/|$))/.test(location.pathname)) return <Workspace signOut={onSignOut} />;
+  if (/^\/(?:$|(?:messages|rooms|work|search|activity|profile)(?:\/|$))/.test(location.pathname))
+    return <Workspace signOut={onSignOut} />;
   return (
     <Shell version={version} onSignOut={onSignOut}>
       <Routes>
@@ -146,12 +184,21 @@ function Desk({ version, onSignOut }: { version: string; onSignOut?: () => void 
   );
 }
 
-function Centered({ title, body }: { title: string; body: string }) {
+function Centered({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: import('react').ReactNode;
+}) {
   return (
     <div className="centered">
       <div className="panel">
         <h1>{title}</h1>
         <p className="lede">{body}</p>
+        {action && <div className="actions mt-4">{action}</div>}
       </div>
     </div>
   );

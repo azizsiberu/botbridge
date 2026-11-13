@@ -1,3 +1,4 @@
+import { Empty } from '../ui';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { base, post, useData, type TaskView } from '../workspace-data';
@@ -62,7 +63,9 @@ export function Tasks(p: ViewProps & { id?: string }) {
             stamp={t.created_at}
           />
         ))}
-        {!list.data?.length && <p className="ws-notice">No tasks here yet.</p>}
+        {!list.data?.length && (
+          <Empty title="No tasks here yet" body="Work assigned to or created by this bot will appear here." />
+        )}
       </State>
     </>
   );

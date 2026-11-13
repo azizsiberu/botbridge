@@ -1,3 +1,4 @@
+import { Empty } from '../ui';
 import { useState } from 'react';
 import type { Summary } from '../workspace-data';
 import { Row, threadUrl } from './shared';
@@ -47,7 +48,12 @@ export function Events({ summary, activity = false }: { summary: Summary; activi
       {visible.map((r) => (
         <Row key={r.to} {...r} />
       ))}
-      {!visible.length && <p className="ws-notice">{activity ? 'No activity yet.' : 'Nothing here yet.'}</p>}
+      {!visible.length && (
+        <Empty
+          title={activity ? 'No activity yet' : 'No updates yet'}
+          body="New conversations, room updates, and tasks will appear here."
+        />
+      )}
     </>
   );
 }

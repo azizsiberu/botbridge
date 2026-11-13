@@ -1,19 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
-import { api, type Overview } from '../api';
+import { type Overview } from '../api';
 import { ErrorNote, FeedItem, FeedList, Loading, PageTitle, time } from '../ui';
+import { usePageData } from '../workspace-data';
 import { PendingBotRequests, PendingOAuthClients } from './PendingOAuth';
 
 export function OverviewPage() {
   const [days, setDays] = useState<14 | 30>(14);
-  const [data, setData] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api<Overview>(`/api/admin/overview?days=${days}`)
-      .then(setData)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }, [days]);
+  const request = usePageData<Overview>(`/api/admin/overview?days=${days}`);
+  const data = request.data ?? null;
+  const error = request.error;
 
   return (
     <div>
@@ -22,14 +19,18 @@ export function OverviewPage() {
         lede="Mail, tasks, and doorbells for the bots you can see."
         action={
           <div className="segment" role="group" aria-label="Range">
-            <button type="button" aria-pressed={days === 14} onClick={() => setDays(14)}>14 days</button>
-            <button type="button" aria-pressed={days === 30} onClick={() => setDays(30)}>30 days</button>
+            <button type="button" aria-pressed={days === 14} onClick={() => setDays(14)}>
+              14 days
+            </button>
+            <button type="button" aria-pressed={days === 30} onClick={() => setDays(30)}>
+              30 days
+            </button>
           </div>
         }
       />
       <PendingOAuthClients />
       <PendingBotRequests />
-      {error ? <ErrorNote message={error} /> : null}
+      {error ? <ErrorNote message={error} onRetry={request.refresh} /> : null}
       {!data && !error ? <Loading label="Loading overview." /> : null}
       {data ? (
         <>
@@ -37,14 +38,24 @@ export function OverviewPage() {
             <Stat label="Active bots" value={data.bots.active} hint={`${data.bots.revoked} revoked`} />
             <Stat label="Messages" value={data.messages.total} hint={`${data.messages.unread} unread`} />
             <Stat label="Open tasks" value={data.tasks.open} hint={`${data.tasks.completed} completed`} />
-            <Stat label="Doorbell" value={data.doorbell.delivered} hint={`${data.doorbell.failed} failed, ${data.doorbell.pending} waiting`} />
+            <Stat
+              label="Doorbell"
+              value={data.doorbell.delivered}
+              hint={`${data.doorbell.failed} failed, ${data.doorbell.pending} waiting`}
+            />
           </div>
           <section className="section">
             <div className="panel">
               <h2>Traffic</h2>
               <div className="legend">
-                <span><i className="swatch mail" aria-hidden="true" />Mail</span>
-                <span><i className="swatch task" aria-hidden="true" />Tasks</span>
+                <span>
+                  <i className="swatch mail" aria-hidden="true" />
+                  Mail
+                </span>
+                <span>
+                  <i className="swatch task" aria-hidden="true" />
+                  Tasks
+                </span>
               </div>
               <Chart mail={data.messages.series} tasks={data.tasks.series} />
             </div>
@@ -54,7 +65,9 @@ export function OverviewPage() {
               <h2>Recent activity</h2>
               <Link to="/audit">Open the audit log</Link>
             </div>
-            {data.recent.length === 0 ? <p className="muted">No activity yet.</p> : (
+            {data.recent.length === 0 ? (
+              <p className="muted">No activity yet.</p>
+            ) : (
               <FeedList label="Recent activity">
                 {data.recent.map((entry) => (
                   <FeedItem
@@ -84,7 +97,13 @@ function Stat({ label, value, hint }: { label: string; value: string | number; h
   );
 }
 
-function Chart({ mail, tasks }: { mail: Array<{ day: string; count: number }>; tasks: Array<{ day: string; count: number }> }) {
+function Chart({
+  mail,
+  tasks,
+}: {
+  mail: Array<{ day: string; count: number }>;
+  tasks: Array<{ day: string; count: number }>;
+}) {
   const max = Math.max(1, ...mail.map((row) => row.count), ...tasks.map((row) => row.count));
   return (
     <div className="chart" role="img" aria-label="Mail and tasks per day">

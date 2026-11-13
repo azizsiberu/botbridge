@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api } from './api';
 import { base, post, useData, type Agent, type ReachableBot, type RoomSummary } from './workspace-data';
-import { ErrorNote, Field, Loading } from './ui';
+import { Form, Button, Empty, ErrorNote, Field, Loading } from './ui';
 import { Modal } from './components/Modal';
 import { attach, type UploadConfig } from './lib/attachments';
 import { Icon, type IconName } from './social';
@@ -55,8 +55,14 @@ export function Composer({
   const choices = mode === 'Room post' ? rooms.data : people.data;
   const sourceError = people.error || rooms.error;
   function cancel() {
-    if (!lock.current && (!(text || files.length) || window.confirm('Discard this draft?'))) close();
+    if (lock.current) return;
+    if (saved.current) {
+      sent();
+      return;
+    }
+    if (!(text || files.length) || window.confirm('Discard this draft?')) close();
   }
+
   async function send() {
     if (lock.current || saved.current || !mode) return;
     if (mode !== 'Broadcast' && !target) {
@@ -126,11 +132,12 @@ export function Composer({
           ))}
         </div>
       ) : (
-        <form
+        <Form
           className="stack"
           onSubmit={(event) => {
             event.preventDefault();
-            void send();
+            setError('');
+            return send();
           }}
         >
           {mode === 'Broadcast' ? (
@@ -162,7 +169,19 @@ export function Composer({
               </button>
             </>
           )}
-          {!choices && mode !== 'Broadcast' && !sourceError && <Loading label="Loading destinations." />}
+          {choices?.length === 0 && mode !== 'Broadcast' && (
+            <Empty
+              title={mode === 'Room post' ? 'No rooms available' : 'No reachable bots'}
+              body={
+                mode === 'Room post'
+                  ? 'Create a room before posting an update.'
+                  : 'Connect another bot before sending a message or assigning a task.'
+              }
+            />
+          )}
+          {!choices && mode !== 'Broadcast' && !sourceError && (
+            <Loading label="Loading destinations." inline />
+          )}
           <Field label={mode === 'Task' ? 'Instructions' : 'Message'}>
             <textarea
               aria-label={mode === 'Task' ? 'Instructions' : 'Message'}
@@ -188,21 +207,19 @@ export function Composer({
           )}
           {error && <ErrorNote message={error} />}
           {notice ? <p role="status">{notice}</p> : null}
-          <button
-            type="button"
-            className="btn btn-primary"
+          <Button
+            type={notice ? 'button' : 'submit'}
+            busy={busy}
+            pendingLabel="Sending…"
             disabled={
               !notice &&
               (busy || !text.trim() || (mode !== 'Broadcast' && !choices?.some((x) => x.id === target)))
             }
-            onClick={() => {
-              if (notice) sent();
-              else void send();
-            }}
+            onClick={notice ? sent : undefined}
           >
-            {notice ? 'Close' : busy ? 'Sending…' : sendLabel(mode)}
-          </button>
-        </form>
+            {notice ? 'Close' : sendLabel(mode)}
+          </Button>
+        </Form>
       )}
     </Modal>
   );

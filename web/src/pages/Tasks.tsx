@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, type Task } from '../api';
+import { useState } from 'react';
+import { type Task } from '../api';
 import {
   Dialog,
   Empty,
@@ -12,18 +12,15 @@ import {
   control,
   time,
 } from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function TasksPage() {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
   const [q, setQ] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Task | null>(null);
 
-  useEffect(() => {
-    api<{ tasks: Task[] }>(`/api/admin/tasks?q=${encodeURIComponent(q)}`)
-      .then((body) => setTasks(body.tasks))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }, [q]);
+  const request = usePageData<{ tasks: Task[] }>(`/api/admin/tasks?q=${encodeURIComponent(q)}`);
+  const tasks = request.data?.tasks ?? null;
+  const error = request.error;
 
   return (
     <div>
@@ -38,7 +35,7 @@ export function TasksPage() {
         />
       </div>
       {!tasks && !error ? <Loading label="Loading tasks." /> : null}
-      {error ? <ErrorNote message={error} /> : null}
+      {error ? <ErrorNote message={error} onRetry={request.refresh} /> : null}
       {tasks?.length === 0 ? (
         <Empty title="No tasks" body="When a bot posts work for another bot, it is listed here." />
       ) : null}

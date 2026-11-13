@@ -124,8 +124,7 @@ h2 {
 }
 
 .empty,
-.error,
-.loading {
+.error {
   font-size: var(--text-body);
 }
 
@@ -276,9 +275,6 @@ h2 {
   font-size: var(--text-control);
   line-height: 1.65;
 }
-.bottom-nav {
-  display: none;
-}
 .inbox-list {
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -411,12 +407,8 @@ button.inbox-row:hover {
 .filters > * {
   min-width: 0;
 }
-.empty,
-.loading {
+.empty {
   padding: 24px;
-}
-.loading {
-  color: var(--muted);
 }
 .profile-summary {
   display: flex;

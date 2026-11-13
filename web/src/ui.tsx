@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from './social';
+import { FormPending } from './components/AsyncForm';
+import { Spinner } from './components/Loading';
+export { Form } from './components/AsyncForm';
+export { Loading, AppLoading } from './components/Loading';
 export { Modal as Dialog } from './components/Modal';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
@@ -26,14 +30,23 @@ export function Button({
   disabled,
   onClick,
   to,
+  busy = false,
+  pendingLabel = 'Working…',
 }: {
   children: ReactNode;
   tone?: 'primary' | 'secondary' | 'danger';
   type?: 'button' | 'submit';
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: () => void | Promise<unknown>;
   to?: string;
+  busy?: boolean;
+  pendingLabel?: string;
 }) {
+  const formPending = useContext(FormPending);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const lock = useRef(false);
+  const working = busy || pending || (type === 'submit' && formPending);
   const className = cx(
     'btn',
     tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary',
@@ -45,9 +58,39 @@ export function Button({
       </Link>
     );
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={className}>
-      {children}
-    </button>
+    <>
+      <button
+        type={type}
+        disabled={disabled || working}
+        aria-busy={working}
+        className={className}
+        onClick={
+          onClick
+            ? async () => {
+                if (lock.current) return;
+                lock.current = true;
+                setError('');
+                try {
+                  const result = onClick();
+                  if (result && typeof result.then === 'function') {
+                    setPending(true);
+                    await result;
+                  }
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Action failed. Try again.');
+                } finally {
+                  lock.current = false;
+                  setPending(false);
+                }
+              }
+            : undefined
+        }
+      >
+        {working && <Spinner />}
+        {working ? pendingLabel : children}
+      </button>
+      {error && <ErrorNote message={error} />}
+    </>
   );
 }
 
@@ -82,8 +125,8 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
         tone="secondary"
         onClick={() => {
           clearTimeout(timer.current);
-          void navigator.clipboard
-            .writeText(value)
+          return Promise.resolve()
+            .then(() => navigator.clipboard.writeText(value))
             .then(() => {
               setState('copied');
               timer.current = setTimeout(() => setState('idle'), 1400);
@@ -112,19 +155,16 @@ export function Empty({ title, body, action }: { title: string; body: string; ac
   );
 }
 
-export function Loading({ label }: { label: string }) {
+export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <p className="loading" aria-busy="true" aria-live="polite">
-      {label}
-    </p>
-  );
-}
-
-export function ErrorNote({ message }: { message: string }) {
-  return (
-    <p role="alert" className="error">
-      {message}
-    </p>
+    <div role="alert" className="error">
+      <p>{message}</p>
+      {onRetry && (
+        <Button tone="secondary" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </div>
   );
 }
 

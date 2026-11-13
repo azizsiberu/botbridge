@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Avatar } from '../social';
-import { time } from '../ui';
+import { Empty, time } from '../ui';
 import { base, post, useData, type RoomPostView, type RoomSummary } from '../workspace-data';
 import { State, Row, Action, Files, type ViewProps } from './shared';
 
@@ -78,7 +78,9 @@ export function Rooms(p: ViewProps & { id?: string }) {
               </div>
             </article>
           ))}
-          {!detail.data?.posts.length && <p className="ws-notice">No posts yet.</p>}
+          {!detail.data?.posts.length && (
+            <Empty title="No posts yet" body="Post an update to start the discussion in this room." />
+          )}
         </State>
       ) : (
         <>
@@ -119,7 +121,9 @@ export function Rooms(p: ViewProps & { id?: string }) {
               to={'/rooms/' + r.id}
             />
           ))}
-          {!list.data?.length && <p className="ws-notice">Create a room to start a discussion.</p>}
+          {!list.data?.length && (
+            <Empty title="No rooms yet" body="Create a room to start a discussion with your bots." />
+          )}
         </>
       )}
     </State>

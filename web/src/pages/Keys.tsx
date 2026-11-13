@@ -1,22 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, type ApiKey } from '../api';
-import { Button, CopyButton, Dialog, Empty, ErrorNote, FeedItem, FeedList, Field, Loading, PageTitle, Status, time, control } from '../ui';
+import {
+  Form,
+  Button,
+  CopyButton,
+  Dialog,
+  Empty,
+  ErrorNote,
+  FeedItem,
+  FeedList,
+  Field,
+  Loading,
+  PageTitle,
+  Status,
+  time,
+  control,
+} from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function KeysPage() {
-  const [keys, setKeys] = useState<ApiKey[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [issued, setIssued] = useState<{ label: string; token: string } | null>(null);
-
-  function load() {
-    api<{ keys: ApiKey[] }>('/api/admin/api-keys')
-      .then((body) => setKeys(body.keys))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const request = usePageData<{ keys: ApiKey[] }>('/api/admin/api-keys');
+  const keys = request.data?.keys ?? null;
+  const error = request.error;
+  const setError = request.setError;
+  const load = request.refresh;
 
   return (
     <div>
@@ -25,7 +34,7 @@ export function KeysPage() {
         lede="A key belongs to this account. A client that connects with it becomes a bot, named from the client. The secret is shown once."
         action={<Button onClick={() => setOpen(true)}>New key</Button>}
       />
-      {error ? <ErrorNote message={error} /> : null}
+      {error ? <ErrorNote message={error} onRetry={load} /> : null}
       {!keys && !error ? <Loading label="Loading API keys." /> : null}
       {keys?.length === 0 ? (
         <Empty
@@ -44,7 +53,9 @@ export function KeysPage() {
               detail={<span className="mono">{key.token_prefix}</span>}
               meta={
                 <>
-                  <Status tone={key.revoked_at ? 'danger' : 'ok'}>{key.revoked_at ? 'revoked' : 'active'}</Status>
+                  <Status tone={key.revoked_at ? 'danger' : 'ok'}>
+                    {key.revoked_at ? 'revoked' : 'active'}
+                  </Status>
                   <span>Last used {time(key.last_used_at)}</span>
                   <span>Created {time(key.created_at)}</span>
                 </>
@@ -54,7 +65,7 @@ export function KeysPage() {
                   <Button
                     tone="danger"
                     onClick={() => {
-                      api(`/api/admin/api-keys/${key.id}/revoke`, { method: 'POST' })
+                      return api(`/api/admin/api-keys/${key.id}/revoke`, { method: 'POST' })
                         .then(load)
                         .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
                     }}
@@ -79,7 +90,9 @@ export function KeysPage() {
       ) : null}
       {issued ? (
         <Dialog title={`Key for ${issued.label}`} onClose={() => setIssued(null)}>
-          <p className="muted">Copy this key now. botbridge stores only a hash, so it cannot be shown again.</p>
+          <p className="muted">
+            Copy this key now. botbridge stores only a hash, so it cannot be shown again.
+          </p>
           <pre className="code">{issued.token}</pre>
           <div className="button-row mt-3">
             <CopyButton value={issued.token} label="Copy key" />
@@ -91,18 +104,25 @@ export function KeysPage() {
   );
 }
 
-function NewKey({ onClose, onCreated }: { onClose: () => void; onCreated: (value: { label: string; token: string }) => void }) {
+function NewKey({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (value: { label: string; token: string }) => void;
+}) {
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
     <Dialog title="New API key" onClose={onClose} busy={busy}>
-      <form
+      <Form
         className="stack"
         onSubmit={(event) => {
           event.preventDefault();
+          setError(null);
           setBusy(true);
-          api<{ label: string; token: string }>('/api/admin/api-keys', {
+          return api<{ label: string; token: string }>('/api/admin/api-keys', {
             method: 'POST',
             body: JSON.stringify({ label }),
           })
@@ -112,15 +132,25 @@ function NewKey({ onClose, onCreated }: { onClose: () => void; onCreated: (value
         }}
       >
         <Field label="Label">
-          <input className={control} value={label} onChange={(event) => setLabel(event.target.value)} required maxLength={80} />
+          <input
+            className={control}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            required
+            maxLength={80}
+          />
         </Field>
         <p className="muted">Use a name you will recognize later, such as the machine or the product.</p>
         {error ? <ErrorNote message={error} /> : null}
         <div className="button-row">
-          <Button type="submit" disabled={busy}>Create key</Button>
-          <Button tone="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>
+            Create key
+          </Button>
+          <Button tone="secondary" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
         </div>
-      </form>
+      </Form>
     </Dialog>
   );
 }
