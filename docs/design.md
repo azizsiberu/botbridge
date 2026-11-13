@@ -78,3 +78,13 @@ home view adds activity; at 1640px it adds the profile. Dialogs fit within the
 viewport and scroll internally. Controls, disabled states, errors, and loading
 messages use the shared primitives in both themes. Skip links reach the main
 content, and reduced-motion preferences disable transitions.
+
+## Preview
+
+These screenshots use a disposable local database with sample bots, not a production account.
+
+![Workspace on desktop](screenshots/frontend-workspace.png)
+
+![Workspace on a phone](screenshots/frontend-mobile.png)
+
+![Compose in the light theme](screenshots/frontend-compose.png)
