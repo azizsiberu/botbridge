@@ -50,3 +50,12 @@ export function useData<T>(url: string, revision: number) {
   }, [url, revision]);
   return state.url === url ? state : { url };
 }
+
+export interface AccountConversation {
+  id: string;
+  created_at: string;
+  preview: string;
+  from: { id: string; name: string };
+  to: { id: string; name: string };
+  unread: number;
+}

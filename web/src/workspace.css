@@ -1,10 +1,10 @@
 /* Workspace layout. Shared type, controls, rows and navigation live in styles/. */
 .ws-layout {
   display: grid;
-  grid-template-columns: var(--nav-width) minmax(0, 760px);
+  grid-template-columns: var(--nav-width) minmax(0, 1fr);
   justify-content: start;
   gap: 24px;
-  max-width: 1680px;
+  max-width: 1120px;
   margin: auto;
   padding: 0 32px;
   height: 100dvh;
@@ -246,31 +246,10 @@ a.ws-row:hover {
   color: var(--muted);
   font-size: 12px;
 }
-.ws-side,
-.ws-identity,
 .ws-mobile-head,
 .ws-mobile-menu,
 .ws-layout > .bottom-nav {
   display: none;
-}
-@media (min-width: 1200px) {
-  .ws-home {
-    grid-template-columns: var(--nav-width) minmax(0, 1fr) 280px;
-  }
-  .ws-side {
-    display: flex;
-  }
-  .ws-side .ws-row {
-    padding: 20px;
-  }
-}
-@media (min-width: 1640px) {
-  .ws-home {
-    grid-template-columns: var(--nav-width) minmax(0, 1fr) 280px 260px;
-  }
-  .ws-identity {
-    display: flex;
-  }
 }
 @media (min-width: 768px) and (max-width: 1023px) {
   .ws-layout {
@@ -302,7 +281,6 @@ a.ws-row:hover {
     border-radius: 12px;
   }
   .ws-nav,
-  .ws-side,
   .ws-identity {
     display: none;
   }

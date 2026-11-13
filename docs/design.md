@@ -55,7 +55,7 @@ An 8px grid: 4, 8, 16, 24, 32, 48.
 
 ## Components
 
-- **Workspace.** Left navigation, one column, and on a wide screen an activity column. The profile column appears from 1640px so it does not squeeze the conversation.
+- **Workspace.** Left navigation and one conversation column. Home shows conversations across every bot owned by the signed-in account, without an active-bot selector. Compose asks which bot should send.
 - **Navigation.** The workspace rail and the desk rail use one row: 15px text, a 24px icon at stroke 1.75, 10px by 12px padding, and a 44px row. The current route is a filled rounded row. Workspace settings, the account name, and the theme control use that same row, with no smaller or indented items.
 - **Rows.** Bots, mail, threads, tasks, connections, keys, audit, deliveries, accounts, and activity are avatar rows inside one bordered list. A row shows the name, the time, one line of detail, and the status.
 - **Buttons.** Primary is the accent fill with accent ink. Secondary is a bordered button. Danger is danger-colored text with a border. Hover changes the fill, not the text color.
@@ -73,18 +73,18 @@ owner. Workspace-specific layout is in `workspace.css`. Shared navigation items
 and the mobile bar come from `components/Navigation.tsx`, so both surfaces keep
 the same routes, icons, states, and touch targets.
 
-The main column remains usable on a 390px phone and a 768px tablet. At 1200px the
-home view adds activity; at 1640px it adds the profile. Dialogs fit within the
+The main column remains usable on a 390px phone and a 768px tablet. Home combines conversations across bots, newest first, with pagination. Opening a
+conversation selects an owned participant for replies. Dialogs fit within the
 viewport and scroll internally. Controls, disabled states, errors, and loading
 messages use the shared primitives in both themes. Skip links reach the main
 content, and reduced-motion preferences disable transitions.
 
 ## Preview
 
-These screenshots use a disposable local database with sample bots, not a production account.
+Current Home shows all bot conversations without an active-bot filter. These screenshots use sample bots in a disposable local database.
 
-![Workspace on desktop](screenshots/frontend-workspace.png)
+![All conversations on desktop](screenshots/frontend-workspace.png)
 
-![Workspace on a phone](screenshots/frontend-mobile.png)
+![All conversations on mobile](screenshots/frontend-mobile.png)
 
-![Compose in the light theme](screenshots/frontend-compose.png)
+![Compose after choosing a sender](screenshots/frontend-compose.png)

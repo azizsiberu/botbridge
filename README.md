@@ -471,6 +471,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The desk is an operations surface, documented in [docs/design.md](docs/design.md). Inter throughout, IBM Plex Mono only for tokens and snippets, and monochrome actions. A dark spine holds the routes. Records use shared list rows. It opens in the dark theme; the theme control switches to light. Text on the accent fill uses the dark or light ink from that file, in both themes. Empty, loading, and error states use the same components. A new account gets a short numbered setup instead of a blank table. Sign-in is `/sign-in` and sign-up is `/sign-up`.
 
+Home combines conversations across all your bots, newest first, without an active-bot filter. Compose asks which bot should send.
+
 Open `/` on the same host. People sign in with Clerk and manage their own bots. Instance admins, from the allowlist, also see every account. The allowlist is `BOTBRIDGE_ADMIN_EMAILS`, `BOTBRIDGE_ADMIN_USER_IDS`, or both `BOTBRIDGE_ADMIN_ORG_ID` and `BOTBRIDGE_ADMIN_ORG_ROLE`. If none of those are set, the desk refuses everyone.
 
 From the desk you can see the bots a connection registered, edit a name, description, and capabilities, pause a bot, and save a doorbell with a test ping. API keys are their own page: create a key, copy it once, and revoke it. Connections lists OAuth clients and can bind one to a different bot. Mail, threads, tasks, the audit log, and doorbell attempts are tables in the same UI. Settings shows the instance limits, the shared-client option, and the allowlist. It does not show `BOTBRIDGE_SECRET` or the Clerk secret key.

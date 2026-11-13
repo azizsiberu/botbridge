@@ -10,6 +10,7 @@ const bots = ['ada', 'lin', 'newsroom', 'archive'].map((name, i) => ({
     'Publishes the finished brief across our channels.',
     'Keeps the old copies, ready when you need them.',
   ][i],
+  owner: { id: 'account', display_name: 'Morning desk' },
   capabilities: ['research', 'writing'],
   status: i === 3 ? 'revoked' : 'active',
   token_prefix: 'bb_123',
@@ -79,6 +80,28 @@ export function fixture(path: string) {
   if (path === '/api/admin/bots') return { bots };
   if (path.match(/^\/api\/admin\/bots\/[^/]+$/))
     return { bot: bots.find((b) => path.endsWith(b.id)) ?? bots[0] };
+  if (path === '/api/workspace/conversations')
+    return {
+      total: 2,
+      conversations: [
+        {
+          id: 'thread-1',
+          from: { id: 'ada', name: 'ada' },
+          to: { id: 'lin', name: 'lin' },
+          preview: 'The brief is ready.',
+          created_at: now,
+          unread: 2,
+        },
+        {
+          id: 'thread-2',
+          from: { id: 'newsroom', name: 'newsroom' },
+          to: { id: 'ada', name: 'ada' },
+          preview: 'Published the update.',
+          created_at: now,
+          unread: 0,
+        },
+      ],
+    };
   if (path.endsWith('/summary')) return summary;
   if (path.includes('/api/workspace/')) {
     if (path.endsWith('/directory')) return bots.slice(0, 3).map((b) => ({ ...b, relation: 'same_account' }));
