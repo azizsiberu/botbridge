@@ -3,15 +3,37 @@ import { Link, useParams } from 'react-router';
 import { api, type Bot, type Delivery, type Guide } from '../api';
 import { Avatar } from '../social';
 import { TabList } from '../components/TabList';
-import { Button, CopyButton, ErrorNote, FeedItem, FeedList, Field, Status, control } from '../ui';
+import {
+  Form,
+  Button,
+  CopyButton,
+  Empty,
+  ErrorNote,
+  FeedItem,
+  FeedList,
+  Field,
+  Loading,
+  PageTitle,
+  Status,
+  control,
+} from '../ui';
+import { usePageData } from '../workspace-data';
 
 const profiles = ['generic', 'openbot', 'grok'] as const;
 
 export function BotPage() {
   const { id = '' } = useParams();
-  const [bot, setBot] = useState<Bot | null>(null);
-  const [guide, setGuide] = useState<Guide | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [revision, bump] = useState(0);
+  const botRequest = usePageData<{ bot: Bot }>(`/api/admin/bots/${id}`, revision);
+  const guideRequest = usePageData<Guide>(`/api/admin/bots/${id}/connect`, revision);
+  const reachRequest = usePageData<{
+    bots: Array<{ name: string; relation: string; owner: { display_name: string } }>;
+  }>(`/api/admin/bots/${id}/reach`, revision);
+  const bot = botRequest.data?.bot;
+  const guide = guideRequest.data;
+  const error = botRequest.error;
+  const setError = botRequest.setError;
+  const [notice, setNotice] = useState('');
   const [ping, setPing] = useState<Delivery | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -20,36 +42,29 @@ export function BotPage() {
   const [profile, setProfile] = useState<(typeof profiles)[number]>('generic');
   const [secret, setSecret] = useState('');
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
-  const [reach, setReach] = useState<
-    Array<{ name: string; relation: string; owner: { display_name: string } }>
-  >([]);
-
+  const reach = reachRequest.data?.bots;
   function load() {
-    api<{ bot: Bot }>(`/api/admin/bots/${id}`)
-      .then((body) => {
-        setBot(body.bot);
-        setName(body.bot.name);
-        setDescription(body.bot.description);
-        setCapabilities(body.bot.capabilities.join(', '));
-        setUrl(body.bot.webhook?.url ?? '');
-        setProfile((body.bot.webhook?.profile as (typeof profiles)[number]) ?? 'generic');
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-    api<Guide>(`/api/admin/bots/${id}/connect`)
-      .then(setGuide)
-      .catch(() => undefined);
-    api<{ bots: Array<{ name: string; relation: string; owner: { display_name: string } }> }>(
-      `/api/admin/bots/${id}/reach`,
-    )
-      .then((body) => setReach(body.bots))
-      .catch(() => undefined);
+    setError(null);
+    guideRequest.setError(null);
+    reachRequest.setError(null);
+    bump((value) => value + 1);
   }
-
   useEffect(() => {
-    load();
-  }, [id]);
+    if (!bot) return;
+    setName(bot.name);
+    setDescription(bot.description);
+    setCapabilities(bot.capabilities.join(', '));
+    setUrl(bot.webhook?.url ?? '');
+    setProfile((bot.webhook?.profile as (typeof profiles)[number]) ?? 'generic');
+  }, [bot]);
 
-  if (!bot) return error ? <ErrorNote message={error} /> : <p className="loading">Loading bot.</p>;
+  if (!bot)
+    return (
+      <>
+        <PageTitle title="Bot profile" lede="Profile, connections, and delivery settings." />
+        {error ? <ErrorNote message={error} onRetry={load} /> : <Loading label="Loading bot." />}
+      </>
+    );
 
   return (
     <div>
@@ -91,23 +106,33 @@ export function BotPage() {
           </div>
         </div>
       </section>
+      {notice && (
+        <p role="status" className="status status-ok mb-4">
+          {notice}
+        </p>
+      )}
       {error ? (
         <div className="mb-4">
-          <ErrorNote message={error} />
+          <ErrorNote message={error} onRetry={load} />
         </div>
       ) : null}
       <div className="split">
         <section className="panel">
           <h2>Profile</h2>
-          <form
+          <Form
             className="stack"
             onSubmit={(event) => {
               event.preventDefault();
-              api(`/api/admin/bots/${bot.id}`, {
+              setError(null);
+              setNotice('');
+              return api(`/api/admin/bots/${bot.id}`, {
                 method: 'PATCH',
                 body: JSON.stringify({ name, description, capabilities }),
               })
-                .then(load)
+                .then(() => {
+                  setNotice('Profile saved.');
+                  load();
+                })
                 .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
             }}
           >
@@ -132,7 +157,7 @@ export function BotPage() {
             <div>
               <Button type="submit">Save profile</Button>
             </div>
-          </form>
+          </Form>
         </section>
         <section className="panel">
           <h2>Doorbell</h2>
@@ -140,16 +165,19 @@ export function BotPage() {
             Optional wake-up when mail or a task arrives. generic and openbot are HMAC signed. grok sends the
             routine key as a bearer token.
           </p>
-          <form
+          <Form
             className="stack mt-4"
             onSubmit={(event) => {
               event.preventDefault();
+              setError(null);
+              setNotice('');
               setWebhookSecret(null);
-              api<{ generated: boolean; secret?: string }>(`/api/admin/bots/${bot.id}/webhook`, {
+              return api<{ generated: boolean; secret?: string }>(`/api/admin/bots/${bot.id}/webhook`, {
                 method: 'PUT',
                 body: JSON.stringify({ url, profile, secret: secret || undefined }),
               })
                 .then((body) => {
+                  setNotice('Webhook saved.');
                   setSecret('');
                   if (body.generated && body.secret) setWebhookSecret(body.secret);
                   load();
@@ -203,7 +231,9 @@ export function BotPage() {
               <Button
                 tone="secondary"
                 onClick={() => {
-                  api<{ delivery: Delivery }>(`/api/admin/bots/${bot.id}/webhook/test`, { method: 'POST' })
+                  return api<{ delivery: Delivery }>(`/api/admin/bots/${bot.id}/webhook/test`, {
+                    method: 'POST',
+                  })
                     .then((body) => setPing(body.delivery))
                     .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
                 }}
@@ -224,7 +254,7 @@ export function BotPage() {
                 Clear webhook
               </Button>
             </div>
-          </form>
+          </Form>
         </section>
       </div>
       <section className="section">
@@ -232,8 +262,15 @@ export function BotPage() {
         <p className="lede mb-3">
           Same-account bots are open. Other names appear only after a connection is approved.
         </p>
-        {reach.length === 0 ? (
-          <p className="muted">No other bots yet.</p>
+        {reachRequest.error ? (
+          <ErrorNote message={reachRequest.error} onRetry={reachRequest.refresh} />
+        ) : !reach ? (
+          <Loading label="Loading reachable bots." inline />
+        ) : reach.length === 0 ? (
+          <Empty
+            title="No reachable bots"
+            body="Other bots appear here when they belong to your account or have an approved connection."
+          />
         ) : (
           <FeedList label="Reachable bots">
             {reach.map((item) => (
@@ -254,7 +291,13 @@ export function BotPage() {
           Add the URL and sign in, or send an account API key from the API keys page. This page does not keep
           a secret. Older bb_ tokens from the CLI still work.
         </p>
-        {guide ? <GuideBlock guide={guide} /> : <p className="loading mt-3">Loading snippets.</p>}
+        {guideRequest.error ? (
+          <ErrorNote message={guideRequest.error} onRetry={guideRequest.refresh} />
+        ) : guide ? (
+          <GuideBlock guide={guide} />
+        ) : (
+          <Loading label="Loading connection snippets." inline />
+        )}
       </section>
     </div>
   );

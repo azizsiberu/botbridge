@@ -2,28 +2,25 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { oauthClientName } from '../../../src/oauth-client';
 import { api, type Bot } from '../api';
-import { Button, ErrorNote, Field, Loading, PageTitle, control } from '../ui';
+import { Form, Button, ErrorNote, Field, Loading, PageTitle, control } from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function ChoosePage() {
   const [params] = useSearchParams();
   const clientId = params.get('client_id') ?? '';
   const clientName = oauthClientName(clientId || 'default');
-  const [bots, setBots] = useState<Bot[] | null>(null);
+  const request = usePageData<{ bots: Bot[] }>('/api/admin/bots');
+  const bots = request.data?.bots.filter((bot) => bot.status === 'active');
   const [botId, setBotId] = useState('');
   const grantId = params.get('grant_id') ?? '';
   const [name, setName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const error = request.error;
+  const setError = request.setError;
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    api<{ bots: Bot[] }>('/api/admin/bots')
-      .then((body) => {
-        setBots(body.bots.filter((bot) => bot.status === 'active'));
-        const first = body.bots.find((bot) => bot.status === 'active');
-        if (first) setBotId(first.id);
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }, []);
+    if (request.data) setBotId(request.data.bots.find((bot) => bot.status === 'active')?.id ?? '');
+  }, [request.data]);
 
   return (
     <div>
@@ -31,7 +28,11 @@ export function ChoosePage() {
         title={clientId ? `Bind ${clientName} to a bot` : 'Bind a connection'}
         lede="A new client registers its own bot. Use this page when you want the connection to act as a bot you already have."
       />
-      {error ? <div className="mb-4"><ErrorNote message={error} /></div> : null}
+      {error ? (
+        <div className="mb-4">
+          <ErrorNote message={error} onRetry={request.refresh} />
+        </div>
+      ) : null}
       {!bots && !error ? <Loading label="Loading your bots." /> : null}
       {done ? (
         <div className="panel">
@@ -43,11 +44,20 @@ export function ChoosePage() {
         <div className="split">
           <section className="panel">
             <h2>Use an existing bot</h2>
-            <form
+            <Form
               className="stack"
               onSubmit={(event) => {
                 event.preventDefault();
-                api('/api/admin/grants', { method: 'POST', body: JSON.stringify({ bot_id: botId, client_id: clientId || 'default', label: clientName, grant_id: grantId || undefined }) })
+                setError(null);
+                return api('/api/admin/grants', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    bot_id: botId,
+                    client_id: clientId || 'default',
+                    label: clientName,
+                    grant_id: grantId || undefined,
+                  }),
+                })
                   .then(() => setDone(true))
                   .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
               }}
@@ -55,34 +65,58 @@ export function ChoosePage() {
               <Field label="Bot">
                 <select className={control} value={botId} onChange={(event) => setBotId(event.target.value)}>
                   {bots.map((bot) => (
-                    <option key={bot.id} value={bot.id}>{bot.name}</option>
+                    <option key={bot.id} value={bot.id}>
+                      {bot.name}
+                    </option>
                   ))}
                 </select>
               </Field>
               <ClientId clientId={clientId} clientName={clientName} />
-              <div><Button type="submit" disabled={!botId}>Use this bot</Button></div>
-            </form>
+              <div>
+                <Button type="submit" disabled={!botId}>
+                  Use this bot
+                </Button>
+              </div>
+            </Form>
           </section>
           <section className="panel">
             <h2>Create one</h2>
-            <form
+            <Form
               className="stack"
               onSubmit={(event) => {
                 event.preventDefault();
-                api<{ bot: { id: string } }>('/api/admin/bots', { method: 'POST', body: JSON.stringify({ name }) })
+                setError(null);
+                return api<{ bot: { id: string } }>('/api/admin/bots', {
+                  method: 'POST',
+                  body: JSON.stringify({ name }),
+                })
                   .then((created) =>
                     api('/api/admin/grants', {
                       method: 'POST',
-                      body: JSON.stringify({ bot_id: created.bot.id, client_id: clientId || 'default', label: clientName, grant_id: grantId || undefined }),
+                      body: JSON.stringify({
+                        bot_id: created.bot.id,
+                        client_id: clientId || 'default',
+                        label: clientName,
+                        grant_id: grantId || undefined,
+                      }),
                     }),
                   )
                   .then(() => setDone(true))
                   .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
               }}
             >
-              <Field label="Name"><input className={control} value={name} onChange={(event) => setName(event.target.value)} required /></Field>
-              <div><Button type="submit">Create and bind</Button></div>
-            </form>
+              <Field label="Name">
+                <input
+                  className={control}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  required
+                />
+              </Field>
+              <div>
+                <Button type="submit">Create and bind</Button>
+              </div>
+            </Form>
           </section>
         </div>
       ) : null}

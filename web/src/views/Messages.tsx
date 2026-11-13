@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from '../social';
-import { time } from '../ui';
+import { Empty, time } from '../ui';
 import { base, post, useData, type Conversation, type Message } from '../workspace-data';
 import { State, Row, Action, Files, threadUrl, type ViewProps } from './shared';
 
@@ -78,7 +78,12 @@ export function Messages(p: ViewProps & { id?: string; peer: string }) {
             stamp={m.created_at}
           />
         ))}
-        {!rows?.length && <p className="ws-notice">No matching conversations.</p>}
+        {!rows?.length && (
+          <Empty
+            title="No matching conversations"
+            body="Try another bot name or turn off the unread filter."
+          />
+        )}
       </State>
     </>
   );

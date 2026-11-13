@@ -24,9 +24,7 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   const location = useLocation(),
     [botId, select] = useState(() => sessionStorage.getItem('botbridge-active-bot') ?? ''),
     [revision, bump] = useState(0),
-    [draft, setDraft] = useState<Draft | null>(() =>
-      new URLSearchParams(location.search).get('compose') === '1' ? {} : null,
-    ),
+    [draft, setDraft] = useState<Draft | null>(null),
     [menu, setMenu] = useState(false);
   const refresh = () => bump((n) => n + 1);
   useEffect(() => {
@@ -49,8 +47,8 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
     window.addEventListener('keydown', closeMenu);
     return () => window.removeEventListener('keydown', closeMenu);
   }, [menu]);
-  const bots = useData<{ bots: Bot[] }>('/api/admin/bots', revision);
-  const me = useData<{ account: Account }>('/api/admin/me', revision);
+  const bots = useData<{ bots: Bot[] }>('/api/admin/bots', revision, true);
+  const me = useData<{ account: Account }>('/api/admin/me', revision, true);
   const owned = bots.data?.bots.filter((b) => b.owner?.id === me.data?.account.id) ?? [];
   const active = owned.filter((b) => b.status === 'active');
   const pinnedBot = new URLSearchParams(location.search).get('bot');
@@ -64,6 +62,13 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   const [, route = '', id] = location.pathname.split('/');
   const title = workspaceLinks.find(([path]) => path === '/' + route)?.[1] ?? 'Home';
   const home = route === '';
+  useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    if (!home || query.get('compose') !== '1' || !bots.data || !me.data) return;
+    if (active.length) setPickingSender(true);
+    query.delete('compose');
+    navigate({ pathname: location.pathname, search: query.toString() }, { replace: true });
+  }, [home, location.pathname, location.search, bots.data, me.data, active.length, navigate]);
   const summary = useData<Summary>(bot && route === 'activity' ? base(bot.id) + '/summary' : '', revision);
   const choose = (value: string) => {
     const hasDraft = draft || document.querySelector('[data-unsaved=true]');
@@ -175,8 +180,16 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
             Refresh
           </button>
         </header>
-        <div className="ws-surface" key={(bot?.id ?? 'none') + location.pathname + location.search}>
-          <State {...bots} data={bots.data} refresh={refresh}>
+        <div
+          className="ws-surface"
+          key={(home ? 'account' : (bot?.id ?? 'none')) + location.pathname + location.search}
+        >
+          <State
+            {...bots}
+            data={bots.data && me.data ? bots.data : undefined}
+            error={bots.error ?? me.error}
+            refresh={refresh}
+          >
             {home ? (
               <>
                 <div className="ws-prompt">

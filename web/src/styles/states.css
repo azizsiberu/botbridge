@@ -1,0 +1,138 @@
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loading {
+  width: 100%;
+  padding: 24px;
+  color: var(--muted);
+  font-size: var(--text-control);
+}
+.loading-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+.loading-skeleton {
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+.skeleton-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 24px;
+}
+.skeleton-row + .skeleton-row {
+  border-top: 1px solid var(--line);
+}
+.skeleton-avatar,
+.skeleton-line {
+  background: var(--line);
+  animation: breathe 1.5s ease-in-out infinite alternate;
+}
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex: none;
+}
+.skeleton-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.skeleton-line {
+  display: block;
+  height: 10px;
+  width: 80%;
+  border-radius: 6px;
+}
+.skeleton-line.short {
+  margin-top: 12px;
+  width: 45%;
+}
+@keyframes breathe {
+  to {
+    opacity: 0.4;
+  }
+}
+.loading-inline {
+  padding: 8px 0;
+}
+.app-loading {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px 16px;
+}
+.app-loading-card {
+  width: min(440px, 100%);
+}
+.app-loading .brand {
+  padding-inline: 24px;
+  margin-bottom: 8px;
+}
+.app-loading .loading {
+  padding-bottom: 0;
+}
+.error {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  overflow-wrap: anywhere;
+}
+.error p {
+  margin: 0;
+  color: var(--danger);
+}
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+fieldset:disabled .btn {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  border-color: transparent;
+  cursor: wait;
+}
+fieldset:disabled .btn[aria-busy='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button[aria-busy='true'] {
+  cursor: wait;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .skeleton-avatar,
+  .skeleton-line {
+    animation: none;
+  }
+}
+@media (max-width: 767px) {
+  .skeleton-row {
+    padding: 20px 16px;
+  }
+  .loading {
+    padding: 20px 16px;
+  }
+  .loading-inline {
+    padding: 8px 0;
+  }
+}

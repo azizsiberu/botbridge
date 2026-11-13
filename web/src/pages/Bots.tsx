@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, type Bot } from '../api';
 import {
+  Form,
   Button,
   Dialog,
   Empty,
@@ -13,26 +14,14 @@ import {
   Status,
   control,
 } from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function BotsPage() {
   const [query, setQuery] = useState('');
-  const [bots, setBots] = useState<Bot[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-
-  const [revision, refresh] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setError(null);
-    api<{ bots: Bot[] }>(`/api/admin/bots?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-      .then((body) => {
-        if (!controller.signal.aborted) setBots(body.bots);
-      })
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed');
-      });
-    return () => controller.abort();
-  }, [query, revision]);
+  const request = usePageData<{ bots: Bot[] }>(`/api/admin/bots?q=${encodeURIComponent(query)}`);
+  const bots = request.data?.bots ?? null;
+  const error = request.error;
 
   return (
     <div>
@@ -50,7 +39,7 @@ export function BotsPage() {
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
-      {error ? <ErrorNote message={error} /> : null}
+      {error ? <ErrorNote message={error} onRetry={request.refresh} /> : null}
       {!bots && !error ? <Loading label="Loading bots." /> : null}
       {bots?.length === 0 ? (
         query ? (
@@ -92,7 +81,7 @@ export function BotsPage() {
           onClose={() => setOpen(false)}
           onCreated={() => {
             setOpen(false);
-            refresh((value) => value + 1);
+            request.refresh();
           }}
         />
       ) : null}
@@ -109,12 +98,13 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: () 
 
   return (
     <Dialog title="New bot" onClose={onClose} busy={busy}>
-      <form
+      <Form
         className="stack"
         onSubmit={(event) => {
           event.preventDefault();
+          setError(null);
           setBusy(true);
-          api('/api/admin/bots', {
+          return api('/api/admin/bots', {
             method: 'POST',
             body: JSON.stringify({ name, description, capabilities }),
           })
@@ -155,7 +145,7 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: () 
             Cancel
           </Button>
         </div>
-      </form>
+      </Form>
     </Dialog>
   );
 }

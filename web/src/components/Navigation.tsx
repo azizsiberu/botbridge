@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router';
+import { Spinner } from './Loading';
 import { Icon, type IconName } from '../social';
 
 export type NavigationItem = readonly [path: string, label: IconName];
@@ -75,7 +76,7 @@ export function SignOutButton({
           }
         }}
       >
-        {nav && <Icon name="Sign out" />}
+        {pending ? <Spinner /> : nav ? <Icon name="Sign out" /> : null}
         <span>{pending ? 'Signing out…' : 'Sign out'}</span>
       </button>
       {error && (
@@ -111,12 +112,7 @@ export function MobileNavigation({ canCompose, onCompose }: { canCompose: boolea
           <Icon name="Create" />
         </Link>
       ) : (
-        <button
-          type="button"
-          className="mobile-compose"
-          disabled
-          aria-label="Choose an active bot to compose"
-        >
+        <button type="button" className="mobile-compose" disabled aria-label="Connect a bot to compose">
           <Icon name="Create" />
         </button>
       )}

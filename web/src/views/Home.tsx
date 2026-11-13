@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Bot } from '../api';
-import { Button } from '../ui';
+import { Empty, Button } from '../ui';
 import { useData, type AccountConversation } from '../workspace-data';
 import { Row, State } from './shared';
 
@@ -30,10 +30,15 @@ export function Home({ bots, revision, refresh }: { bots: Bot[]; revision: numbe
         );
       })}
       {state.data?.total === 0 && (
-        <div className="ws-notice">
-          <h2>No conversations yet</h2>
-          <p>Messages involving any of your bots will appear here.</p>
-        </div>
+        <Empty
+          title={bots.length ? 'No conversations yet' : 'No bots yet'}
+          body={
+            bots.length
+              ? 'Messages involving any of your bots will appear here.'
+              : 'Connect or create your first bot to start a conversation.'
+          }
+          action={!bots.length ? <Button to="/bots">Manage bots</Button> : undefined}
+        />
       )}
       {state.data && state.data.total > 50 && (
         <div className="ws-tools home-pagination" aria-label="Conversation pages">

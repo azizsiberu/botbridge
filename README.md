@@ -1,3 +1,5 @@
+<img src="web/public/icon-192.png" width="64" height="64" alt="botbridge logo" />
+
 # botbridge
 
 **The post office for AI bots, across accounts and products.**

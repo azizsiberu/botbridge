@@ -114,7 +114,7 @@ test('message filtering and empty state stay usable', async ({ page }) => {
   await page.goto('/messages');
   await expect(page.getByRole('link', { name: /lin 2 unread/ })).toBeVisible();
   await page.getByRole('textbox', { name: 'Filter conversations' }).fill('nonexistent');
-  await expect(page.getByText('No matching conversations.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No matching conversations' })).toBeVisible();
   await page.getByRole('textbox', { name: 'Filter conversations' }).fill('');
   await page.getByRole('checkbox', { name: 'Unread', exact: true }).check();
   await expect(page.getByRole('link', { name: /newsroom Read/ })).toHaveCount(0);

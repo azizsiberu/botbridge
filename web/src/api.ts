@@ -19,13 +19,17 @@ export function setTokenGetter(getter: (options?: { skipCache?: boolean }) => Pr
   tokenGetter = getter;
 }
 
-export async function publicConfig(): Promise<PublicConfig> {
-  const response = await fetch('/api/public-config');
+export async function publicConfig(signal?: AbortSignal): Promise<PublicConfig> {
+  const response = await fetch('/api/public-config', { signal });
   if (!response.ok) throw new ApiError(response.status, 'Could not load configuration');
   return (await response.json()) as PublicConfig;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, auth: { skipCache?: boolean; requireToken?: boolean } = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  init: RequestInit = {},
+  auth: { skipCache?: boolean; requireToken?: boolean } = {},
+): Promise<T> {
   const token = await tokenGetter(auth.skipCache ? { skipCache: true } : undefined);
   if (auth.requireToken && !token) throw new ApiError(401, 'Clerk session token is not ready');
   const response = await fetch(path, {

@@ -106,7 +106,7 @@ export function Shell({
           </div>
         </aside>
       </div>
-      <MobileNavigation canCompose={Boolean(sessionStorage.getItem('botbridge-active-bot'))} />
+      <MobileNavigation canCompose />
     </div>
   );
 }

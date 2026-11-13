@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { api } from './api';
 import type { ReachableBot } from '../../src/workspace-types';
 import type { RoomSummary, RoomPostView } from '../../src/workspace-types';
@@ -34,22 +33,6 @@ export function base(bot: string) {
 export function post<T>(url: string, body: unknown = {}) {
   return api<T>(url, { method: 'POST', body: JSON.stringify(body) });
 }
-export function useData<T>(url: string, revision: number) {
-  const [state, setState] = useState<{ url: string; data?: T; error?: string }>({ url: '' });
-  useEffect(() => {
-    if (!url) return;
-    const controller = new AbortController();
-    api<T>(url, { signal: controller.signal })
-      .then((data) => {
-        if (!controller.signal.aborted) setState({ url, data });
-      })
-      .catch((err: Error) => {
-        if (!controller.signal.aborted) setState({ url, error: err.message });
-      });
-    return () => controller.abort();
-  }, [url, revision]);
-  return state.url === url ? state : { url };
-}
 
 export interface AccountConversation {
   id: string;
@@ -59,3 +42,5 @@ export interface AccountConversation {
   to: { id: string; name: string };
   unread: number;
 }
+
+export { useData, usePageData } from './lib/use-request';

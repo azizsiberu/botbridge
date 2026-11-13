@@ -64,3 +64,12 @@ Frontend ownership:
 
 Add shared visual rules to their owning stylesheet instead of appending overrides
 to the CSS entry point. Keep route-specific behavior in its view module.
+
+The frontend state inventory is in [docs/frontend-states.md](docs/frontend-states.md).
+The browser suite includes held requests, server failures and retries across all
+workspace and desk routes; it also checks form locking, preserved input, reduced
+motion, and the brand icon files.
+
+Brand geometry lives in `web/src/brand/mark.json`. Regenerate the committed SVG,
+PNG and ICO assets with `npm run assets:brand --prefix web` after installing
+Playwright Chromium. Normal builds use the committed files and need no browser.

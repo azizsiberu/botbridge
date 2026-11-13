@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type PendingOAuthClient, type RegistrationRequest } from '../api';
-import { Button, FeedItem, FeedList, time } from '../ui';
+import { Button, ErrorNote, Loading, FeedItem, FeedList, time } from '../ui';
+import { usePageData } from '../workspace-data';
 
 export function PendingOAuthClients({
   presentation = 'banner',
@@ -9,32 +10,26 @@ export function PendingOAuthClients({
   presentation?: 'banner' | 'section';
   onLoaded?: (count: number) => void;
 }) {
-  const [clients, setClients] = useState<PendingOAuthClient[] | null>(null);
-
+  const request = usePageData<{ clients: PendingOAuthClient[] }>('/api/admin/oauth/pending');
+  const clients = request.data?.clients;
   useEffect(() => {
-    let cancel = false;
-    api<{ clients: PendingOAuthClient[] }>('/api/admin/oauth/pending')
-      .then((body) => {
-        if (cancel) return;
-        setClients(body.clients);
-        onLoaded?.(body.clients.length);
-      })
-      .catch(() => {
-        if (cancel) return;
-        setClients([]);
-        onLoaded?.(0);
-      });
-    return () => {
-      cancel = true;
-    };
-  }, [onLoaded]);
-
-  if (!clients || clients.length === 0) return null;
+    if (clients) onLoaded?.(clients.length);
+  }, [clients, onLoaded]);
+  if (request.error) return <ErrorNote message={request.error} onRetry={request.refresh} />;
+  if (!clients) return <Loading label="Loading connection requests." inline />;
+  if (clients.length === 0) return null;
 
   return (
-    <section className="section" role="status" style={presentation === 'banner' ? { marginTop: 0 } : undefined}>
+    <section
+      className="section"
+      role="status"
+      style={presentation === 'banner' ? { marginTop: 0 } : undefined}
+    >
       <h2>Registration needs attention</h2>
-      <p className="lede">These clients signed in and did not get a bot. Connect again, or bind the client to a bot you already have.</p>
+      <p className="lede">
+        These clients signed in and did not get a bot. Connect again, or bind the client to a bot you already
+        have.
+      </p>
       <FeedList label="OAuth clients that did not register">
         {clients.map((client) => (
           <FeedItem
@@ -64,37 +59,32 @@ const REASONS: Record<string, string> = {
 
 /** Bots a connection asked for and did not get. Nothing is created until the owner approves here. */
 export function PendingBotRequests({ onChange }: { onChange?: () => void }) {
-  const [rows, setRows] = useState<RegistrationRequest[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function load() {
-    api<{ requests: RegistrationRequest[] }>('/api/admin/registrations')
-      .then((body) => setRows(body.requests))
-      .catch(() => setRows([]));
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
+  const request = usePageData<{ requests: RegistrationRequest[] }>('/api/admin/registrations');
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const rows = request.data?.requests;
+  const error = request.error;
   function decide(id: string, action: 'approve' | 'decline') {
-    setError(null);
-    api(`/api/admin/registrations/${id}/${action}`, { method: 'POST', body: '{}' })
+    if (pendingId) return;
+    setPendingId(id);
+    request.setError(null);
+    return api(`/api/admin/registrations/${id}/${action}`, { method: 'POST', body: '{}' })
       .then(() => {
-        load();
+        request.refresh();
         onChange?.();
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
+      .catch((err: unknown) => request.setError(err instanceof Error ? err.message : 'Failed'))
+      .finally(() => setPendingId(null));
   }
-
-  if (!rows || rows.length === 0) return null;
+  if (error) return <ErrorNote message={error} onRetry={request.refresh} />;
+  if (!rows) return <Loading label="Loading bot registration requests." inline />;
+  if (rows.length === 0) return null;
 
   return (
     <section className="section" role="status">
       <h2>New bots waiting for you</h2>
       <p className="lede">
-        A connection that already has a bot asked for another one. Nothing was created. Approve only agents you recognise. A new bot can talk to your
-        other bots, but not to other accounts until they approve it.
+        A connection that already has a bot asked for another one. Nothing was created. Approve only agents
+        you recognise. A new bot can talk to your other bots, but not to other accounts until they approve it.
       </p>
       {error ? <p className="lede">{error}</p> : null}
       <FeedList label="Bot registration requests">
@@ -105,11 +95,23 @@ export function PendingBotRequests({ onChange }: { onChange?: () => void }) {
             title={row.requested_name}
             when={<time dateTime={row.last_seen_at}>{time(row.last_seen_at)}</time>}
             detail={(row.reason && REASONS[row.reason]) ?? row.reason ?? 'Waiting for a decision.'}
-            meta={<span>{row.label ? `${row.label} (${row.client})` : row.client} · {row.attempts} tries</span>}
+            meta={
+              <span>
+                {row.label ? `${row.label} (${row.client})` : row.client} · {row.attempts} tries
+              </span>
+            }
             actions={
               <>
-                <Button onClick={() => decide(row.id, 'approve')}>Approve</Button>
-                <Button tone="secondary" onClick={() => decide(row.id, 'decline')}>Decline</Button>
+                <Button disabled={Boolean(pendingId)} onClick={() => decide(row.id, 'approve')}>
+                  Approve
+                </Button>
+                <Button
+                  tone="secondary"
+                  disabled={Boolean(pendingId)}
+                  onClick={() => decide(row.id, 'decline')}
+                >
+                  Decline
+                </Button>
               </>
             }
           />
