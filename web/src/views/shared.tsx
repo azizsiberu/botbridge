@@ -38,11 +38,13 @@ export function Row({
   name,
   detail,
   stamp,
+  meta,
 }: {
   to: string;
   name: string;
   detail: string;
   stamp?: string;
+  meta?: string;
 }) {
   return (
     <Link className="ws-row" to={to}>
@@ -50,6 +52,7 @@ export function Row({
       <div>
         <strong>{name}</strong>
         <p>{detail}</p>
+        {meta && <span className="status status-warn">{meta}</span>}
         {stamp && <time dateTime={stamp}>{time(stamp)}</time>}
       </div>
     </Link>

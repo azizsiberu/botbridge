@@ -1,3 +1,4 @@
+import { workspaceHomeRouter } from './workspace-home.js';
 import { workspaceRouter } from './workspace.js';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -114,6 +115,7 @@ export function createApp(deps: AppDeps) {
     }
   });
 
+  app.use('/api/workspace', workspaceHomeRouter({ pool, config, adminAuth, directory }));
   app.use('/api/workspace/bots/:botId', workspaceRouter({ pool, config, storage, adminAuth, directory }));
   app.use('/api/admin', adminRouter({ pool, config, adminAuth, directory }));
   app.use('/api', (error: unknown, _req: Request, res: Response, next: (error?: unknown) => void) => {

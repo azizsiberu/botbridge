@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router';
-import { Avatar, Icon } from './social';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { Icon } from './social';
 import { Composer, type Draft } from './Composer';
 import { Directory, Events, Messages, ProfileCard, Rooms, State, Tasks } from './WorkspaceViews';
 import { base, useData, type Agent, type Summary } from './workspace-data';
 import type { Account, Bot } from './api';
 import { ThemeButton } from './theme';
 import './workspace.css';
+import { Home } from './views/Home';
+import { Modal } from './components/Modal';
 import {
   Brand,
   deskLinks,
@@ -17,6 +19,8 @@ import {
 } from './components/Navigation';
 
 export function Workspace({ signOut }: { signOut?: () => void | Promise<void> }) {
+  const navigate = useNavigate();
+  const [pickingSender, setPickingSender] = useState(false);
   const location = useLocation(),
     [botId, select] = useState(() => sessionStorage.getItem('botbridge-active-bot') ?? ''),
     [revision, bump] = useState(0),
@@ -47,21 +51,31 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   }, [menu]);
   const bots = useData<{ bots: Bot[] }>('/api/admin/bots', revision);
   const me = useData<{ account: Account }>('/api/admin/me', revision);
-  const active = bots.data?.bots.filter((b) => b.status === 'active') ?? [];
-  const bot = active.find((b) => b.id === botId);
+  const owned = bots.data?.bots.filter((b) => b.owner?.id === me.data?.account.id) ?? [];
+  const active = owned.filter((b) => b.status === 'active');
+  const pinnedBot = new URLSearchParams(location.search).get('bot');
+  const bot = active.find((b) => b.id === (pinnedBot ?? botId));
+  useEffect(() => {
+    if (pinnedBot && bot) {
+      select(bot.id);
+      sessionStorage.setItem('botbridge-active-bot', bot.id);
+    }
+  }, [pinnedBot, bot?.id]);
   const [, route = '', id] = location.pathname.split('/');
   const title = workspaceLinks.find(([path]) => path === '/' + route)?.[1] ?? 'Home';
   const home = route === '';
-  const summary = useData<Summary>(
-    bot && (home || route === 'activity') ? base(bot.id) + '/summary' : '',
-    revision,
-  );
+  const summary = useData<Summary>(bot && route === 'activity' ? base(bot.id) + '/summary' : '', revision);
   const choose = (value: string) => {
     const hasDraft = draft || document.querySelector('[data-unsaved=true]');
     if (hasDraft && !confirm('Discard this draft and switch bots?')) return;
     setDraft(null);
     select(value);
     sessionStorage.setItem('botbridge-active-bot', value);
+    if (pinnedBot) {
+      const query = new URLSearchParams(location.search);
+      query.delete('bot');
+      navigate({ pathname: location.pathname, search: query.toString() }, { replace: true });
+    }
   };
   function selector() {
     return (
@@ -101,8 +115,9 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
     </>
   );
   const props = bot ? { bot, revision, refresh, compose: setDraft } : null;
+  const openComposer = () => (home ? setPickingSender(true) : setDraft({}));
   const composer = (
-    <button className="ws-compose" disabled={!bot} onClick={() => setDraft({})}>
+    <button className="ws-compose" disabled={home ? active.length === 0 : !bot} onClick={openComposer}>
       <Icon name="Compose" />
       Compose
     </button>
@@ -121,7 +136,7 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
     </div>
   );
   return (
-    <div className={'ws-layout ' + (home ? 'ws-home' : '')}>
+    <div className="ws-layout">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -143,36 +158,40 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
       </header>
       {menu && (
         <nav className="ws-mobile-menu" id="workspace-mobile-menu" aria-label="Workspace">
-          {selector()}
+          {!home && selector()}
           {nav}
         </nav>
       )}
       <aside className="ws-nav">
         <Brand />
-        {selector()}
+        {!home && selector()}
         <nav aria-label="Workspace">{nav}</nav>
         {composer}
       </aside>
       <main className="ws-column" id="main-content" tabIndex={-1}>
         <header>
-          <h1>{home ? 'For you' : title}</h1>
+          <h1>{home ? 'All conversations' : title}</h1>
           <button className="text-button" onClick={refresh}>
             Refresh
           </button>
         </header>
         <div className="ws-surface" key={(bot?.id ?? 'none') + location.pathname + location.search}>
           <State {...bots} data={bots.data} refresh={refresh}>
-            {!props || !bot ? (
-              onboarding
-            ) : home ? (
+            {home ? (
               <>
                 <div className="ws-prompt">
-                  <Avatar name={bot.name} />
-                  <button onClick={() => setDraft({})}>What's happening, bot?</button>
+                  <span className="bot-avatar">
+                    <Icon name="Messages" />
+                  </span>
+                  <button onClick={openComposer} disabled={!active.length}>
+                    Start a conversation
+                  </button>
                   {composer}
                 </div>
-                {panel(false)}
+                <Home bots={owned} revision={revision} refresh={refresh} />
               </>
+            ) : !props || !bot ? (
+              onboarding
             ) : route === 'messages' ? (
               <Messages {...props} id={id} peer={new URLSearchParams(location.search).get('peer') ?? ''} />
             ) : route === 'rooms' ? (
@@ -192,32 +211,27 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
           </State>
         </div>
       </main>
-      {home && (
-        <>
-          <aside className="ws-column ws-side">
-            <header>
-              <h2>Activity</h2>
-              <Link to="/activity">View all</Link>
-            </header>
-            <div className="ws-surface">
-              {bot ? panel(true) : <p className="ws-notice">Choose a bot to see activity.</p>}
-            </div>
-          </aside>
-          <aside className="ws-column ws-identity">
-            <header>
-              <h2>Profile</h2>
-            </header>
-            <div className="ws-surface">
-              {bot ? (
-                <ProfileCard agent={bot} own compose={setDraft} />
-              ) : (
-                <p className="ws-notice">No bot selected.</p>
-              )}
-            </div>
-          </aside>
-        </>
+      <MobileNavigation canCompose={home ? active.length > 0 : Boolean(bot)} onCompose={openComposer} />
+      {pickingSender && (
+        <Modal title="Send as" onClose={() => setPickingSender(false)}>
+          <p className="muted">Choose the bot that will send your message.</p>
+          <div className="compose-options">
+            {active.map((sender) => (
+              <button
+                key={sender.id}
+                onClick={() => {
+                  choose(sender.id);
+                  setPickingSender(false);
+                  setDraft({});
+                }}
+              >
+                <Icon name="Manage bots" />
+                <strong>{sender.name}</strong>
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
-      <MobileNavigation canCompose={Boolean(bot)} onCompose={() => setDraft({})} />
       {bot && draft && (
         <Composer
           key={bot.id}

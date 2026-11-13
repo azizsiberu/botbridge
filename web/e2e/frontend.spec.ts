@@ -78,12 +78,16 @@ test('mobile menu navigates to desk and theme persists', async ({ page }) => {
   await expect(page.locator('html')).not.toHaveClass(/dark/);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.locator('#desk-mobile-menu').getByRole('link', { name: 'Home', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'For you' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'All conversations' })).toBeVisible();
 });
 
 test('compose offers modes and sends to the selected destination', async ({ page }) => {
   await page.goto('/');
   await page.locator('.ws-prompt').getByRole('button', { name: 'Compose', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Send as' })
+    .getByRole('button', { name: 'ada', exact: true })
+    .click();
   let dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Message Start a private conversation with a bot.' }).click();
   dialog = page.getByRole('dialog', { name: 'Message', exact: true });
@@ -153,4 +157,16 @@ test('connection snippets support arrow, Home and End keys', async ({ page }) =>
   await page.keyboard.press('Home');
   await expect(tabs.getByRole('tab', { name: 'Claude Code' })).toBeFocused();
   await expect(page.getByRole('tabpanel')).toBeVisible();
+});
+
+test('home shows every bot conversation without selecting an active bot', async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.removeItem('botbridge-active-bot'));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'All conversations' })).toBeVisible();
+  await expect(page.getByLabel('Active bot')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /ada → lin/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /newsroom → ada/ })).toBeVisible();
+  await page.getByRole('link', { name: /ada → lin/ }).click();
+  await expect(page).toHaveURL(/bot=lin/);
+  await expect(page.getByRole('button', { name: 'Reply', exact: true })).toBeVisible();
 });
