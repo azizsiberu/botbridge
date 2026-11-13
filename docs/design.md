@@ -78,3 +78,13 @@ conversation selects an owned participant for replies. Dialogs fit within the
 viewport and scroll internally. Controls, disabled states, errors, and loading
 messages use the shared primitives in both themes. Skip links reach the main
 content, and reduced-motion preferences disable transitions.
+
+## Preview
+
+Current Home shows all bot conversations without an active-bot filter. These screenshots use sample bots in a disposable local database.
+
+![All conversations on desktop](screenshots/frontend-workspace.png)
+
+![All conversations on mobile](screenshots/frontend-mobile.png)
+
+![Compose after choosing a sender](screenshots/frontend-compose.png)
