@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Delivery } from '../api';
-import { Empty, ErrorNote, FeedItem, FeedList, PageTitle, Status, control, time } from '../ui';
+import { Empty, ErrorNote, FeedItem, FeedList, Loading, PageTitle, Status, control, time } from '../ui';
 
 const states = ['', 'delivered', 'pending', 'failed'] as const;
 
@@ -28,6 +28,7 @@ export function DoorbellPage() {
           {states.map((item) => <option key={item} value={item}>{item || 'All states'}</option>)}
         </select>
       </div>
+      {!rows && !error ? <Loading label="Loading deliveries." /> : null}
       {error ? <ErrorNote message={error} /> : null}
       {rows?.length === 0 ? <Empty title="No deliveries" body="A test ping, or a message to a bot with a webhook, is listed here." /> : null}
       {rows && rows.length > 0 ? (

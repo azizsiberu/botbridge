@@ -4,6 +4,7 @@ const databaseUrl = process.env.DATABASE_URL ?? 'postgres://botbridge:botbridge@
 
 export default defineConfig({
   test: {
+    include: ['test/**/*.test.ts'],
     fileParallelism: false,
     pool: 'forks',
     poolOptions: {

@@ -1,38 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router';
-import { Avatar, Icon, type IconName } from './social';
+import { Link, useLocation } from 'react-router';
+import { Avatar, Icon } from './social';
 import { Composer, type Draft } from './Composer';
 import { Directory, Events, Messages, ProfileCard, Rooms, State, Tasks } from './WorkspaceViews';
 import { base, useData, type Agent, type Summary } from './workspace-data';
 import type { Account, Bot } from './api';
 import { ThemeButton } from './theme';
 import './workspace.css';
+import {
+  Brand,
+  deskLinks,
+  MobileNavigation,
+  NavigationItems,
+  SignOutButton,
+  workspaceLinks,
+} from './components/Navigation';
 
-const links = [
-  ['/', 'Home'],
-  ['/messages', 'Messages'],
-  ['/rooms', 'Rooms'],
-  ['/work', 'Tasks'],
-  ['/search', 'Search'],
-  ['/activity', 'Activity'],
-  ['/profile', 'Profile'],
-] as const;
-const desk = [
-  ['/overview', 'Overview'],
-  ['/bots', 'Manage bots'],
-  ['/mail', 'Mail explorer'],
-  ['/tasks', 'Tasks'],
-  ['/doorbell', 'Deliveries'],
-  ['/connections', 'Connections'],
-  ['/keys', 'API keys'],
-  ['/audit', 'Audit'],
-  ['/settings', 'Settings'],
-] as const satisfies ReadonlyArray<readonly [string, IconName]>;
 export function Workspace({ signOut }: { signOut?: () => void | Promise<void> }) {
   const location = useLocation(),
     [botId, select] = useState(() => sessionStorage.getItem('botbridge-active-bot') ?? ''),
     [revision, bump] = useState(0),
-    [draft, setDraft] = useState<Draft | null>(() => new URLSearchParams(location.search).get('compose') === '1' ? {} : null),
+    [draft, setDraft] = useState<Draft | null>(() =>
+      new URLSearchParams(location.search).get('compose') === '1' ? {} : null,
+    ),
     [menu, setMenu] = useState(false);
   const refresh = () => bump((n) => n + 1);
   useEffect(() => {
@@ -44,12 +34,23 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
     setMenu(false);
     bump((n) => n + 1);
   }, [location.key]);
+  useEffect(() => {
+    if (!menu) return;
+    const closeMenu = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenu(false);
+        document.querySelector<HTMLButtonElement>('.ws-mobile-head button')?.focus();
+      }
+    };
+    window.addEventListener('keydown', closeMenu);
+    return () => window.removeEventListener('keydown', closeMenu);
+  }, [menu]);
   const bots = useData<{ bots: Bot[] }>('/api/admin/bots', revision);
   const me = useData<{ account: Account }>('/api/admin/me', revision);
   const active = bots.data?.bots.filter((b) => b.status === 'active') ?? [];
   const bot = active.find((b) => b.id === botId);
   const [, route = '', id] = location.pathname.split('/');
-  const title = links.find(([path]) => path === '/' + route)?.[1] ?? 'Home';
+  const title = workspaceLinks.find(([path]) => path === '/' + route)?.[1] ?? 'Home';
   const home = route === '';
   const summary = useData<Summary>(
     bot && (home || route === 'activity') ? base(bot.id) + '/summary' : '',
@@ -79,36 +80,23 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   }
   const nav = (
     <>
-      {links.map(([to, label]) => (
-        <NavLink key={to} className="nav-item" to={to} end={to === '/'}>
-          <Icon name={label} />
-          <span>{label}</span>
-        </NavLink>
-      ))}
+      <NavigationItems items={workspaceLinks} />
       <details className="nav-group">
         <summary className="nav-item">
           <Icon name="Settings" />
           <span>Workspace settings</span>
         </summary>
-        {desk.map(([to, label]) => (
-          <Link key={to} className="nav-item" to={to}>
-            <Icon name={label} />
-            <span>{label}</span>
-          </Link>
-        ))}
-        {me.data?.account.isAdmin && (
-          <Link className="nav-item" to="/admin">
-            <Icon name="Admin" />
-            <span>Admin</span>
-          </Link>
-        )}
+        <div className="nav-group-items">
+          <NavigationItems items={deskLinks} />
+          {me.data?.account.isAdmin && (
+            <Link className="nav-item" to="/admin">
+              <Icon name="Admin" />
+              <span>Admin</span>
+            </Link>
+          )}
+        </div>
         <ThemeButton nav />
-        {signOut && (
-          <button type="button" className="nav-item" onClick={() => void signOut()}>
-            <Icon name="Sign out" />
-            <span>Sign out</span>
-          </button>
-        )}
+        {signOut && <SignOutButton nav onSignOut={signOut} />}
       </details>
     </>
   );
@@ -134,8 +122,16 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
   );
   return (
     <div className={'ws-layout ' + (home ? 'ws-home' : '')}>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <header className="ws-mobile-head">
-        <button aria-label={menu ? 'Close menu' : 'Open menu'} aria-expanded={menu} onClick={() => setMenu(!menu)}>
+        <button
+          aria-label={menu ? 'Close menu' : 'Open menu'}
+          aria-expanded={menu}
+          aria-controls="workspace-mobile-menu"
+          onClick={() => setMenu(!menu)}
+        >
           <Icon name={menu ? 'Close' : 'Menu'} />
         </button>
         <Link to="/" aria-label="Botbridge home">
@@ -146,24 +142,23 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
         </Link>
       </header>
       {menu && (
-        <nav className="ws-mobile-menu">
+        <nav className="ws-mobile-menu" id="workspace-mobile-menu" aria-label="Workspace">
           {selector()}
           {nav}
         </nav>
       )}
       <aside className="ws-nav">
-        <Link className="nav-brand" to="/">
-          <Icon name="Brand" />
-          <span>botbridge</span>
-        </Link>
+        <Brand />
         {selector()}
-        <nav>{nav}</nav>
+        <nav aria-label="Workspace">{nav}</nav>
         {composer}
       </aside>
-      <main className="ws-column">
+      <main className="ws-column" id="main-content" tabIndex={-1}>
         <header>
           <h1>{home ? 'For you' : title}</h1>
-          <button onClick={refresh}>Refresh</button>
+          <button className="text-button" onClick={refresh}>
+            Refresh
+          </button>
         </header>
         <div className="ws-surface" key={(bot?.id ?? 'none') + location.pathname + location.search}>
           <State {...bots} data={bots.data} refresh={refresh}>
@@ -222,25 +217,7 @@ export function Workspace({ signOut }: { signOut?: () => void | Promise<void> })
           </aside>
         </>
       )}
-      <nav className="ws-bottom" aria-label="Mobile navigation">
-        {([
-          ['/', 'Home'],
-          ['/messages', 'Messages'],
-          ['', 'Compose'],
-          ['/activity', 'Activity'],
-          ['/profile', 'Profile'],
-        ] as const).map(([to, label]) =>
-          to ? (
-            <NavLink key={to} to={to} end aria-label={label}>
-              <Icon name={label} />
-            </NavLink>
-          ) : (
-            <button key="compose" disabled={!bot} onClick={() => setDraft({})} aria-label="Compose">
-              <Icon name="Create" />
-            </button>
-          ),
-        )}
-      </nav>
+      <MobileNavigation canCompose={Boolean(bot)} onCompose={() => setDraft({})} />
       {bot && draft && (
         <Composer
           key={bot.id}

@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
 import { api, type Bot } from '../api';
-import { Button, Dialog, ErrorNote, FeedItem, FeedList, Field, Loading, PageTitle, Status, control } from '../ui';
+import {
+  Button,
+  Dialog,
+  Empty,
+  ErrorNote,
+  FeedItem,
+  FeedList,
+  Field,
+  Loading,
+  PageTitle,
+  Status,
+  control,
+} from '../ui';
 
 export function BotsPage() {
   const [query, setQuery] = useState('');
@@ -8,17 +20,19 @@ export function BotsPage() {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  function load(q = query) {
-    api<{ bots: Bot[] }>(`/api/admin/bots?q=${encodeURIComponent(q)}`)
-      .then((body) => setBots(body.bots))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }
-
+  const [revision, refresh] = useState(0);
   useEffect(() => {
-    api<{ bots: Bot[] }>('/api/admin/bots')
-      .then((body) => setBots(body.bots))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed'));
-  }, []);
+    const controller = new AbortController();
+    setError(null);
+    api<{ bots: Bot[] }>(`/api/admin/bots?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then((body) => {
+        if (!controller.signal.aborted) setBots(body.bots);
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed');
+      });
+    return () => controller.abort();
+  }, [query, revision]);
 
   return (
     <div>
@@ -33,15 +47,26 @@ export function BotsPage() {
           aria-label="Search bots"
           placeholder="Search name or description"
           value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            load(event.target.value);
-          }}
+          onChange={(event) => setQuery(event.target.value)}
         />
       </div>
       {error ? <ErrorNote message={error} /> : null}
       {!bots && !error ? <Loading label="Loading bots." /> : null}
-      {bots?.length === 0 ? <Onboarding onCreate={() => setOpen(true)} /> : null}
+      {bots?.length === 0 ? (
+        query ? (
+          <Empty
+            title="No matching bots"
+            body="Try a different name or description."
+            action={
+              <Button tone="secondary" onClick={() => setQuery('')}>
+                Clear search
+              </Button>
+            }
+          />
+        ) : (
+          <Onboarding onCreate={() => setOpen(true)} />
+        )
+      ) : null}
       {bots && bots.length > 0 ? (
         <FeedList label="Bots">
           {bots.map((bot) => (
@@ -67,7 +92,7 @@ export function BotsPage() {
           onClose={() => setOpen(false)}
           onCreated={() => {
             setOpen(false);
-            load(query);
+            refresh((value) => value + 1);
           }}
         />
       ) : null}
@@ -83,7 +108,7 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: () 
   const [busy, setBusy] = useState(false);
 
   return (
-    <Dialog title="New bot" onClose={onClose}>
+    <Dialog title="New bot" onClose={onClose} busy={busy}>
       <form
         className="stack"
         onSubmit={(event) => {
@@ -98,13 +123,37 @@ function CreateBot({ onClose, onCreated }: { onClose: () => void; onCreated: () 
             .finally(() => setBusy(false));
         }}
       >
-        <Field label="Name"><input className={control} value={name} onChange={(event) => setName(event.target.value)} required /></Field>
-        <Field label="Description"><input className={control} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="Capabilities"><input className={control} value={capabilities} placeholder="writing, review" onChange={(event) => setCapabilities(event.target.value)} /></Field>
+        <Field label="Name">
+          <input
+            className={control}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Description">
+          <input
+            className={control}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </Field>
+        <Field label="Capabilities">
+          <input
+            className={control}
+            value={capabilities}
+            placeholder="writing, review"
+            onChange={(event) => setCapabilities(event.target.value)}
+          />
+        </Field>
         {error ? <ErrorNote message={error} /> : null}
         <div className="button-row">
-          <Button type="submit" disabled={busy}>Create bot</Button>
-          <Button tone="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>
+            Create bot
+          </Button>
+          <Button tone="secondary" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
         </div>
       </form>
     </Dialog>
@@ -115,10 +164,15 @@ function Onboarding({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="empty">
       <h2>No bots yet</h2>
-      <p>Add the MCP URL in a client and sign in, or create an API key and connect with it. The bot shows up here.</p>
+      <p>
+        Add the MCP URL in a client and sign in, or create an API key and connect with it. The bot shows up
+        here.
+      </p>
       <div className="actions">
         <Button to="/keys">Create an API key</Button>
-        <Button tone="secondary" onClick={onCreate}>Create a bot</Button>
+        <Button tone="secondary" onClick={onCreate}>
+          Create a bot
+        </Button>
       </div>
       <ol className="steps">
         <li>
@@ -131,7 +185,10 @@ function Onboarding({ onCreate }: { onCreate: () => void }) {
         </li>
         <li>
           <strong>Rename it here</strong>
-          <p>Revoke a bot to take it out of the directory. Another account still needs a connection you both accept.</p>
+          <p>
+            Revoke a bot to take it out of the directory. Another account still needs a connection you both
+            accept.
+          </p>
         </li>
       </ol>
     </div>

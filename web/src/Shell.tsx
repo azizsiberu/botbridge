@@ -1,21 +1,23 @@
-import { Avatar, Icon, type IconName } from './social';
-import { NavLink } from 'react-router';
+import { Avatar, Icon } from './social';
+import {
+  Brand,
+  deskLinks,
+  MobileNavigation,
+  NavigationItems,
+  SignOutButton,
+  type NavigationItem,
+} from './components/Navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { watchAdminAccount } from './admin-session';
 import type { Account } from './api';
 import { ThemeButton } from './theme';
 
-const links = [
-  ['/', 'Home'], ['/bots', 'Manage bots'], ['/mail', 'Mail explorer'],
-  ['/tasks', 'Tasks'], ['/doorbell', 'Deliveries'], ['/settings', 'Settings'],
-  ['/overview', 'Overview'], ['/connections', 'Connections'], ['/keys', 'API keys'], ['/audit', 'Audit'],
-] as const;
 function Nav({
   items,
   account,
   onNavigate,
 }: {
-  items: ReadonlyArray<readonly [string, IconName]>;
+  items: readonly NavigationItem[];
   account?: string | null;
   onNavigate?: () => void;
 }) {
@@ -27,56 +29,50 @@ function Nav({
           <span>{account}</span>
         </div>
       ) : null}
-      {items.map(([to, label]) => (
-        <NavLink key={to} className="nav-item" to={to} end={to === '/'} onClick={onNavigate}>
-          <Icon name={label} /><span>{label}</span>
-        </NavLink>
-      ))}
+      <NavigationItems items={items} onNavigate={onNavigate} />
     </nav>
   );
 }
 
-function SignOutButton({ onSignOut, nav = false }: { onSignOut: () => void | Promise<void>; nav?: boolean }) {
-  const [pending, setPending] = useState(false);
-  const label = pending ? 'Signing out' : 'Sign out';
-  return (
-    <button
-      type="button"
-      className={nav ? 'nav-item' : 'theme-toggle'}
-      disabled={pending}
-      aria-busy={pending}
-      onClick={() => {
-        setPending(true);
-        void Promise.resolve(onSignOut()).catch(() => setPending(false));
-      }}
-    >
-      {nav ? <Icon name="Sign out" /> : null}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-export function Shell({ children, version, onSignOut }: { children: ReactNode; version: string; onSignOut?: () => void | Promise<void> }) {
+export function Shell({
+  children,
+  version,
+  onSignOut,
+}: {
+  children: ReactNode;
+  version: string;
+  onSignOut?: () => void | Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
 
   useEffect(() => watchAdminAccount(setAccount), []);
 
+  const links: readonly NavigationItem[] = [['/', 'Home'], ...deskLinks];
   const items = account?.isAdmin ? [...links, ['/admin', 'Admin'] as const] : links;
 
   return (
     <div>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <header className="topbar">
-        <strong><Icon name="Brand" /> botbridge</strong>
+        <Brand />
         <div className="topbar-actions">
           {onSignOut ? <SignOutButton onSignOut={onSignOut} /> : null}
-          <button type="button" className="theme-toggle" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-controls="desk-mobile-menu"
+          >
             {open ? 'Close' : 'Menu'}
           </button>
         </div>
       </header>
       {open ? (
-        <div className="mobile-nav">
+        <div className="mobile-nav" id="desk-mobile-menu">
           <Nav items={items} account={account?.displayName} onNavigate={() => setOpen(false)} />
           <div className="spine-foot">
             <ThemeButton nav />
@@ -86,7 +82,7 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
       <div className="shell">
         <aside className="spine">
           <div className="spine-brand">
-            <strong className="nav-brand"><Icon name="Brand" /> <span>botbridge</span></strong>
+            <Brand />
             <p className="nav-version">v{version}</p>
           </div>
           <Nav items={items} account={account?.displayName} />
@@ -95,7 +91,7 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
             {onSignOut ? <SignOutButton nav onSignOut={onSignOut} /> : null}
           </div>
         </aside>
-        <main className="main">
+        <main className="main" id="main-content" tabIndex={-1}>
           <div className="main-inner">{children}</div>
         </main>
         <aside className="network-panel" aria-label="Your network">
@@ -110,15 +106,7 @@ export function Shell({ children, version, onSignOut }: { children: ReactNode; v
           </div>
         </aside>
       </div>
-      <nav className="bottom-nav" aria-label="Mobile navigation">
-        <NavLink to="/" end aria-label="Home"><Icon name="Home" /></NavLink>
-        <NavLink to="/messages" aria-label="Messages"><Icon name="Inbox" /></NavLink>
-        {sessionStorage.getItem('botbridge-active-bot')
-          ? <NavLink to="/?compose=1" aria-label="Compose"><Icon name="Create" /></NavLink>
-          : <button disabled aria-label="Choose an active bot to compose"><Icon name="Create" /></button>}
-        <NavLink to="/activity" aria-label="Activity"><Icon name="Activity" /></NavLink>
-        <NavLink to="/profile" aria-label="Profile"><Icon name="Profile" /></NavLink>
-      </nav>
+      <MobileNavigation canCompose={Boolean(sessionStorage.getItem('botbridge-active-bot'))} />
     </div>
   );
 }

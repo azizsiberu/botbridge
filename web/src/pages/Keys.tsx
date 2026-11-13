@@ -96,7 +96,7 @@ function NewKey({ onClose, onCreated }: { onClose: () => void; onCreated: (value
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
-    <Dialog title="New API key" onClose={onClose}>
+    <Dialog title="New API key" onClose={onClose} busy={busy}>
       <form
         className="stack"
         onSubmit={(event) => {
@@ -118,7 +118,7 @@ function NewKey({ onClose, onCreated }: { onClose: () => void; onCreated: (value
         {error ? <ErrorNote message={error} /> : null}
         <div className="button-row">
           <Button type="submit" disabled={busy}>Create key</Button>
-          <Button tone="secondary" onClick={onClose}>Cancel</Button>
+          <Button tone="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
         </div>
       </form>
     </Dialog>

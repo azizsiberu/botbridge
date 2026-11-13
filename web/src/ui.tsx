@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from './social';
+export { Modal as Dialog } from './components/Modal';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -33,8 +34,16 @@ export function Button({
   onClick?: () => void;
   to?: string;
 }) {
-  const className = cx('btn', tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary');
-  if (to) return <Link to={to} className={className}>{children}</Link>;
+  const className = cx(
+    'btn',
+    tone === 'primary' ? 'btn-primary' : tone === 'danger' ? 'btn-danger' : 'btn-secondary',
+  );
+  if (to)
+    return (
+      <Link to={to} className={className}>
+        {children}
+      </Link>
+    );
   return (
     <button type={type} disabled={disabled} onClick={onClick} className={className}>
       {children}
@@ -53,24 +62,43 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 
 export const control = 'control';
 
-export function Status({ tone, children }: { tone: 'ok' | 'warn' | 'danger' | 'neutral'; children: ReactNode }) {
+export function Status({
+  tone,
+  children,
+}: {
+  tone: 'ok' | 'warn' | 'danger' | 'neutral';
+  children: ReactNode;
+}) {
   return <span className={cx('status', `status-${tone}`)}>{children}</span>;
 }
 
 export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <Button
-      tone="secondary"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1400);
-        });
-      }}
-    >
-      <span aria-live="polite">{copied ? 'Copied' : label}</span>
-    </Button>
+    <div className="copy-control">
+      <Button
+        tone="secondary"
+        onClick={() => {
+          clearTimeout(timer.current);
+          void navigator.clipboard
+            .writeText(value)
+            .then(() => {
+              setState('copied');
+              timer.current = setTimeout(() => setState('idle'), 1400);
+            })
+            .catch(() => setState('error'));
+        }}
+      >
+        <span aria-live="polite">{state === 'copied' ? 'Copied' : label}</span>
+      </Button>
+      {state === 'error' && (
+        <span role="alert" className="status status-danger">
+          Could not copy. Select and copy the text.
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -85,23 +113,37 @@ export function Empty({ title, body, action }: { title: string; body: string; ac
 }
 
 export function Loading({ label }: { label: string }) {
-  return <p className="loading" aria-busy="true" aria-live="polite">{label}</p>;
+  return (
+    <p className="loading" aria-busy="true" aria-live="polite">
+      {label}
+    </p>
+  );
 }
 
 export function ErrorNote({ message }: { message: string }) {
-  return <p role="alert" className="error">{message}</p>;
+  return (
+    <p role="alert" className="error">
+      {message}
+    </p>
+  );
 }
 
 export function DataTable({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="table-wrap">
-      <table className="data" aria-label={label}>{children}</table>
+      <table className="data" aria-label={label}>
+        {children}
+      </table>
     </div>
   );
 }
 
 export function FeedList({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="inbox-list" aria-label={label}>{children}</div>;
+  return (
+    <div className="inbox-list" aria-label={label}>
+      {children}
+    </div>
+  );
 }
 
 export function FeedItem({
@@ -139,33 +181,27 @@ export function FeedItem({
       </div>
     </>
   );
-  if (to) return <Link className="inbox-row" to={to}>{content}</Link>;
-  if (onClick) return <button type="button" className="inbox-row" onClick={onClick}>{content}</button>;
+  if (to)
+    return (
+      <Link className="inbox-row" to={to}>
+        {content}
+      </Link>
+    );
+  if (onClick)
+    return (
+      <button type="button" className="inbox-row" onClick={onClick}>
+        {content}
+      </button>
+    );
   return <div className="inbox-row">{content}</div>;
-}
-
-export function Dialog({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div className="dialog-back" onClick={onClose}>
-      <div className={cx('dialog', wide && 'wide')} role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={(event) => event.stopPropagation()}>
-        <div className="dialog-head">
-          <h2 id="dialog-title">{title}</h2>
-          <Button tone="secondary" onClick={onClose}>Close</Button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 export function time(value: string | null): string {
   if (!value) return '—';
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }

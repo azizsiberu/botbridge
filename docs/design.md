@@ -32,7 +32,7 @@ Each text pair above is at least 4.5:1. Focus rings and control borders are at l
 
 ## Type
 
-Interface text is [Inter](https://fonts.google.com/specimen/Inter), weights 400, 500, and 600. IBM Plex Mono is only for code, tokens, and secrets.
+Interface text is locally bundled [Inter](https://fonts.google.com/specimen/Inter), weights 400, 500, and 600. IBM Plex Mono is only for code, tokens, and secrets.
 
 | Use | Size | Weight | Line height |
 | --- | --- | --- | --- |
@@ -48,14 +48,14 @@ Nothing is set in all capitals. Numbers use tabular figures.
 
 An 8px grid: 4, 8, 16, 24, 32, 48.
 
-- Buttons and inputs are 36px tall with a 12px radius.
-- Lists, panels, dialogs, and stat groups use an 18px radius. The home feed uses 20px.
+- Buttons and inputs are at least 40px tall with a 12px radius.
+- Lists, panels, dialogs, and stat groups use an 18px radius. The home feed uses 18px.
 - Avatars are circles.
-- Dialogs float on a dimmed page. Escape closes them.
+- Native dialogs float on a dimmed page, trap focus, and return focus to the opener. Escape and an outside click close them unless a submission is pending.
 
 ## Components
 
-- **Workspace.** Left navigation, one column, and on a wide screen an activity column and a profile column. This layout is the reference and stays as it is.
+- **Workspace.** Left navigation, one column, and on a wide screen an activity column. The profile column appears from 1640px so it does not squeeze the conversation.
 - **Navigation.** The workspace rail and the desk rail use one row: 15px text, a 24px icon at stroke 1.75, 10px by 12px padding, and a 44px row. The current route is a filled rounded row. Workspace settings, the account name, and the theme control use that same row, with no smaller or indented items.
 - **Rows.** Bots, mail, threads, tasks, connections, keys, audit, deliveries, accounts, and activity are avatar rows inside one bordered list. A row shows the name, the time, one line of detail, and the status.
 - **Buttons.** Primary is the accent fill with accent ink. Secondary is a bordered button. Danger is danger-colored text with a border. Hover changes the fill, not the text color.
@@ -64,3 +64,17 @@ An 8px grid: 4, 8, 16, 24, 32, 48.
 - **Auth.** Clerk sign-in and sign-up use this palette, Inter, a 12px control radius, and accent ink on the primary button.
 
 Motion only answers an action. A short color transition on links and buttons is skipped when the person prefers reduced motion.
+
+## Implementation
+
+`styles.css` is an import entry point. Tokens live in `styles/tokens.css`; base,
+navigation, layouts, shared components, auth, and composer rules each have one
+owner. Workspace-specific layout is in `workspace.css`. Shared navigation items
+and the mobile bar come from `components/Navigation.tsx`, so both surfaces keep
+the same routes, icons, states, and touch targets.
+
+The main column remains usable on a 390px phone and a 768px tablet. At 1200px the
+home view adds activity; at 1640px it adds the profile. Dialogs fit within the
+viewport and scroll internally. Controls, disabled states, errors, and loading
+messages use the shared primitives in both themes. Skip links reach the main
+content, and reduced-motion preferences disable transitions.

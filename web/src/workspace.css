@@ -1,10 +1,12 @@
+/* Workspace layout. Shared type, controls, rows and navigation live in styles/. */
 .ws-layout {
   display: grid;
-  grid-template-columns: 248px minmax(0, 760px);
-  gap: 16px;
-  max-width: 1920px;
+  grid-template-columns: var(--nav-width) minmax(0, 760px);
+  justify-content: start;
+  gap: 24px;
+  max-width: 1680px;
   margin: auto;
-  padding: 0 20px;
+  padding: 0 32px;
   height: 100dvh;
 }
 .ws-nav,
@@ -15,233 +17,265 @@
   flex-direction: column;
 }
 .ws-nav {
-  overflow: hidden;
-  padding: 16px 12px 24px 0;
-  gap: 16px;
+  padding: 20px 0 24px;
+  gap: 24px;
 }
-.ws-brand {
-  font-weight: 650;
-  font-size: 24px;
-  letter-spacing: -1px;
-  color: var(--ink);
-  text-decoration: none;
-}
-.ws-nav nav,
-.ws-mobile-menu {
+.ws-nav nav {
   display: grid;
   gap: 4px;
   align-content: start;
-}
-.ws-nav nav {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-.ws-layout summary:not(.nav-item) {
-  cursor: pointer;
-  padding: 8px 0;
+  scrollbar-width: thin;
 }
 .ws-selector {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  width: 100%;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-meta);
+  font-weight: 500;
 }
-.ws-selector select,
-.compose-options button {
+.ws-selector select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-height);
+  padding: 8px 12px;
   background: var(--sheet);
   color: var(--ink);
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  max-width: 100%;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-control);
+  font-size: var(--text-control);
+  font-weight: 400;
 }
-.ws-column > header,
-.compose-dialog header {
+.ws-column > header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  min-height: 68px;
-  padding: 0 16px;
+  gap: 12px;
+  min-height: 80px;
+  padding: 0 8px;
 }
-.ws-column header :is(h1, h2),
-.ws-notice h2 {
+.ws-column > header :is(h1, h2) {
   font-size: 17px;
   font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
-.ws-column header :is(a, button),
-.compose-dialog header button {
-  font-size: 13px;
+.ws-column > header a {
   color: var(--muted);
+  font-size: var(--text-meta);
+  text-decoration: none;
+  padding: 8px;
+}
+.ws-column > header a:hover {
+  color: var(--ink);
 }
 .ws-surface {
-  border: 1px solid var(--line);
-  border-radius: 18px 18px 0 0;
-  overflow: auto;
   flex: 1;
-  background: var(--field);
+  min-height: 0;
+  overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--sheet);
 }
 .ws-surface > .ws-selector {
-  margin: 20px;
+  margin: 24px;
+  width: calc(100% - 48px);
 }
 .ws-row,
 .ws-prompt {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 20px;
+  padding: 24px;
   border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
   text-decoration: none;
   color: var(--ink);
 }
+a.ws-row:hover {
+  background: var(--field);
+}
 .ws-row > div {
+  flex: 1;
   min-width: 0;
 }
 .ws-row strong {
-  font-size: 14px;
+  font-size: var(--text-control);
 }
 .ws-row time {
-  font-size: 12px;
-  color: var(--muted);
   display: block;
-  margin-top: 3px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .ws-row p,
 .ws-profile p,
 .ws-notice p {
+  margin-top: 6px;
   color: var(--muted);
-  margin: 6px 0;
+  font-size: var(--text-control);
+  line-height: 1.6;
 }
-.ws-row .ws-body,
-.ws-body {
+.ws-body,
+.ws-row .ws-body {
+  margin-top: 12px;
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .ws-prompt {
   align-items: center;
+  gap: 16px;
 }
 .ws-prompt > button:first-of-type {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
   text-align: left;
   color: var(--muted);
-  flex: 1;
+  font-size: var(--text-control);
 }
 .ws-compose {
   display: inline-flex;
   gap: 8px;
   align-items: center;
   justify-content: center;
-  background: var(--ink);
-  color: var(--field);
-  padding: 8px 13px;
-  border-radius: 12px;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--text-control);
   font-weight: 600;
 }
-.ws-layout button {
-  cursor: pointer;
+.ws-compose:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
-.ws-layout button:disabled {
-  opacity: 0.55;
-  cursor: default;
+.ws-compose:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+.ws-compose svg {
+  width: 20px;
+  height: 20px;
+}
+.ws-nav > .ws-compose {
+  min-height: 44px;
 }
 .ws-notice,
 .ws-profile,
-.ws-tools,
-.ws-surface > .loading {
-  padding: 20px;
+.ws-tools {
+  padding: 24px;
 }
 .ws-notice,
 .ws-tools,
 .ws-profile {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   justify-items: start;
+}
+.ws-notice h2 {
+  font-size: var(--text-heading);
+}
+.ws-notice > p {
+  margin-top: 0;
+}
+.ws-notice a {
+  font-size: var(--text-control);
+  font-weight: 500;
+}
+.ws-notice > .error {
+  width: 100%;
 }
 .ws-tools {
   border-bottom: 1px solid var(--line);
 }
-.ws-tools > * {
-  max-width: 100%;
+.ws-tools > :is(input, label, details) {
+  width: 100%;
+}
+.ws-tools label {
+  display: grid;
+  gap: 8px;
+  font-size: var(--text-control);
+}
+.ws-tools label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.ws-tools details > :not(summary) {
+  margin-top: 12px;
+}
+.ws-tools details .btn + .btn {
+  margin-left: 8px;
+}
+.ws-tools summary {
+  cursor: pointer;
+  font-size: var(--text-control);
+  font-weight: 500;
+  padding-block: 4px;
 }
 .ws-profile h2 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-size: 24px;
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+.ws-profile p {
+  margin-top: 0;
 }
 .ws-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .ws-tags span {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 3px 9px;
-  font-size: 13px;
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .ws-side,
 .ws-identity,
 .ws-mobile-head,
 .ws-mobile-menu,
-.ws-bottom {
+.ws-layout > .bottom-nav {
   display: none;
-}
-.compose-dialog {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(500px, 94vw);
-  max-height: 85dvh;
-  overflow: auto;
-  padding: 18px 22px;
-  background: var(--sheet);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-}
-.compose-dialog::backdrop {
-  background: #0009;
-}
-.compose-dialog header {
-  padding: 0;
-  min-height: 40px;
-}
-.compose-dialog h2 {
-  font-size: 20px;
-}
-.compose-dialog .stack,
-.compose-options {
-  margin-top: 18px;
-}
-.compose-options {
-  display: grid;
-  gap: 10px;
-}
-.compose-dialog input {
-  max-width: 100%;
 }
 @media (min-width: 1200px) {
   .ws-home {
-    grid-template-columns: 248px minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-columns: var(--nav-width) minmax(0, 1fr) 280px;
   }
   .ws-side {
     display: flex;
   }
+  .ws-side .ws-row {
+    padding: 20px;
+  }
 }
-@media (min-width: 1440px) {
+@media (min-width: 1640px) {
   .ws-home {
-    grid-template-columns: 248px repeat(3, minmax(0, 1fr));
+    grid-template-columns: var(--nav-width) minmax(0, 1fr) 280px 260px;
   }
   .ws-identity {
     display: flex;
   }
 }
-@media (min-width: 768px) and (max-width: 1199px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .ws-layout {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 208px minmax(0, 1fr);
+    padding-inline: 24px;
   }
 }
 @media (max-width: 767px) {
@@ -253,14 +287,19 @@
   }
   .ws-mobile-head {
     display: flex;
+    flex: none;
     align-items: center;
     justify-content: space-between;
-    min-height: 52px;
-    padding: 0 16px;
+    min-height: 60px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--line);
   }
-  .ws-mobile-head > a:first-of-type {
-    font-size: 28px;
+  .ws-mobile-head > * {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
   }
   .ws-nav,
   .ws-side,
@@ -269,66 +308,49 @@
   }
   .ws-mobile-menu {
     display: grid;
-    position: absolute;
-    inset: 52px 0 65px;
-    background: var(--field);
-    z-index: 5;
+    align-content: start;
+    gap: 4px;
+    position: fixed;
+    inset: 60px 0 65px;
+    z-index: 25;
     overflow: auto;
     padding: 16px;
+    background: var(--field);
+  }
+  .ws-mobile-menu > .ws-selector {
+    margin-bottom: 16px;
   }
   .ws-layout > main {
     flex: 1;
   }
   .ws-column > header {
-    min-height: 48px;
+    min-height: 56px;
+    padding-inline: 16px;
   }
   .ws-surface {
     border: 0;
+    border-top: 1px solid var(--line);
     border-radius: 0;
   }
-  .ws-bottom {
+  .ws-layout > .bottom-nav {
     display: flex;
-    justify-content: space-around;
-    background: var(--field);
-    border-top: 1px solid var(--line);
-    padding: 5px 0 max(env(safe-area-inset-bottom), 5px);
   }
-  .ws-bottom > * {
-    min-width: 44px;
-    min-height: 44px;
-    display: grid;
-    place-content: center;
-    color: var(--muted);
+  .ws-row,
+  .ws-prompt {
+    padding: 20px 16px;
   }
-  .ws-bottom [aria-current='page'] {
-    color: var(--ink);
+  .ws-prompt {
+    gap: 12px;
   }
-  .ws-bottom button {
-    background: var(--line);
-    border-radius: 14px;
+  .ws-prompt .ws-compose {
+    padding-inline: 12px;
   }
   .ws-prompt .ws-compose svg {
     display: none;
   }
-  .ws-row {
-    padding: 16px;
+  .ws-notice,
+  .ws-tools,
+  .ws-profile {
+    padding: 24px 16px;
   }
-  .compose-dialog {
-    margin: auto auto 0;
-    width: 100%;
-    max-height: 85dvh;
-    border-radius: 18px 18px 0 0;
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
-  }
-}
-
-.topbar strong:has(svg) {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.ws-nav svg,
-.ws-bottom svg,
-.ws-compose svg {
-  flex-shrink: 0;
 }

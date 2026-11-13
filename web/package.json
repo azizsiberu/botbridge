@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@clerk/react": "6.18.6",
@@ -18,6 +19,8 @@
     "react-router": "8.5.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
