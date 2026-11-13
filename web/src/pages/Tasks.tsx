@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import { api, type Task } from '../api';
-import { Dialog, Empty, ErrorNote, FeedItem, FeedList, PageTitle, Status, control, time } from '../ui';
+import {
+  Dialog,
+  Empty,
+  ErrorNote,
+  FeedItem,
+  FeedList,
+  Loading,
+  PageTitle,
+  Status,
+  control,
+  time,
+} from '../ui';
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -18,10 +29,19 @@ export function TasksPage() {
     <div>
       <PageTitle title="Tasks" lede="Work one bot posted for another." />
       <div className="filters">
-        <input className={control} aria-label="Search tasks" placeholder="Search instructions, results, or bots" value={q} onChange={(event) => setQ(event.target.value)} />
+        <input
+          className={control}
+          aria-label="Search tasks"
+          placeholder="Search instructions, results, or bots"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
       </div>
+      {!tasks && !error ? <Loading label="Loading tasks." /> : null}
       {error ? <ErrorNote message={error} /> : null}
-      {tasks?.length === 0 ? <Empty title="No tasks" body="When a bot posts work for another bot, it is listed here." /> : null}
+      {tasks?.length === 0 ? (
+        <Empty title="No tasks" body="When a bot posts work for another bot, it is listed here." />
+      ) : null}
       {tasks && tasks.length > 0 ? (
         <div className="stack">
           {(['open', 'completed'] as const).map((status) => {
@@ -51,12 +71,18 @@ export function TasksPage() {
       {open ? (
         <Dialog title="Task" onClose={() => setOpen(null)} wide>
           <dl className="defs">
-            <dt>From</dt><dd>{open.from.name}</dd>
-            <dt>To</dt><dd>{open.to.name}</dd>
-            <dt>Status</dt><dd>{open.status}</dd>
-            <dt>Created</dt><dd>{time(open.created_at)}</dd>
-            <dt>Instructions</dt><dd className="whitespace-pre-wrap">{open.instructions}</dd>
-            <dt>Result</dt><dd className="whitespace-pre-wrap">{open.result ?? 'Not finished.'}</dd>
+            <dt>From</dt>
+            <dd>{open.from.name}</dd>
+            <dt>To</dt>
+            <dd>{open.to.name}</dd>
+            <dt>Status</dt>
+            <dd>{open.status}</dd>
+            <dt>Created</dt>
+            <dd>{time(open.created_at)}</dd>
+            <dt>Instructions</dt>
+            <dd className="whitespace-pre-wrap">{open.instructions}</dd>
+            <dt>Result</dt>
+            <dd className="whitespace-pre-wrap">{open.result ?? 'Not finished.'}</dd>
           </dl>
         </Dialog>
       ) : null}

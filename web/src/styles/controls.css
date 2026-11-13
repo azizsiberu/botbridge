@@ -1,0 +1,262 @@
+.btn {
+  display: inline-flex;
+  min-height: var(--control-height);
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-size: var(--text-control);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  gap: 8px;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.control {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-control);
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--text-control);
+  min-width: 0;
+}
+
+a.row-link,
+.btn-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a.row-link:hover,
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.btn:disabled {
+  border-color: transparent;
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+a.btn {
+  text-decoration: none;
+}
+
+.main a.btn-primary,
+.main a.btn-primary:hover {
+  color: var(--accent-ink);
+}
+
+.main a.btn-secondary,
+.main a.btn-secondary:hover {
+  color: var(--ink);
+}
+
+.main a.btn-danger,
+.main a.btn-danger:hover {
+  color: var(--danger);
+}
+
+.btn-secondary {
+  border-color: var(--control-line);
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--field);
+}
+
+.btn-danger {
+  border-color: var(--danger);
+  background: var(--sheet);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--field);
+  color: var(--danger);
+}
+
+.btn-link {
+  display: inline-block;
+  max-width: 360px;
+  height: auto;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: var(--text-control);
+}
+
+.field > span {
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+textarea.control {
+  height: auto;
+  min-height: 88px;
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.control::placeholder {
+  color: var(--muted);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button[aria-selected='true'] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+.control:disabled {
+  border-color: var(--line);
+  color: var(--disabled-fg);
+  background: var(--disabled-bg);
+}
+.control[type='file'] {
+  height: auto;
+  padding: 8px 12px;
+}
+input[type='file']::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  color: var(--ink);
+  font-size: var(--text-control);
+  height: auto;
+  min-height: var(--control-height);
+  align-items: flex-start;
+  padding-block: 8px;
+}
+.check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  margin-top: 4px;
+}
+.tabs button {
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: var(--text-control);
+  cursor: pointer;
+}
+.segment {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+}
+.segment button {
+  padding: 0 12px;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-control);
+  font-weight: 500;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  min-height: 32px;
+}
+.segment button[aria-pressed='true'] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--line);
+}
+
+.inline-form .field {
+  flex: 1;
+  min-width: min(100%, 220px);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--line);
+  color: var(--ink);
+}
+.icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+.icon-button:disabled {
+  color: var(--disabled-fg);
+}
+.text-button {
+  padding: 8px;
+  min-height: 36px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: var(--text-meta);
+}
+.text-button:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+.copy-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

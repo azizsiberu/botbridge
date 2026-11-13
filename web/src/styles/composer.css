@@ -1,0 +1,43 @@
+.compose-dialog .stack,
+.compose-options {
+  margin-top: 24px;
+}
+.compose-options {
+  display: grid;
+  gap: 8px;
+}
+.compose-options button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--field);
+  text-align: left;
+}
+.compose-options button:hover {
+  border-color: var(--control-line);
+  background: var(--sheet);
+}
+.compose-options button > span {
+  display: grid;
+  gap: 4px;
+}
+.compose-options strong {
+  font-size: var(--text-control);
+}
+.compose-options small {
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: 1.5;
+}
+.compose-options svg {
+  flex-shrink: 0;
+  color: var(--muted);
+  width: 22px;
+  height: 22px;
+}
+.compose-dialog .stack > .btn {
+  width: 100%;
+}

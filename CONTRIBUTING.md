@@ -34,3 +34,33 @@ Vitest talks to the `DATABASE_URL` you export. It migrates on startup and trunca
 - Run `npm test`, `npm run lint`, and `npm run typecheck` before you open the PR.
 
 GitHub Actions runs those three against Postgres 16.
+
+## Frontend checks
+
+The browser suite uses deterministic API fixtures. It checks the workspace and
+all desk routes at phone, tablet, and desktop widths in both themes, then checks
+Compose, filters, mobile navigation, dialog keyboard behavior, and WCAG AA rules.
+It does not need Clerk credentials or Postgres and does not write to a real account.
+
+```bash
+npm ci --prefix web
+npx --prefix web playwright install chromium
+npm run test:ui --prefix web
+```
+
+On a machine with Chromium already installed, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable instead of downloading a
+browser. Playwright starts Vite automatically and retains traces and screenshots
+for failures under `web/test-results/`.
+
+Frontend ownership:
+
+- `web/src/styles/tokens.css`: palette, fonts, sizes, spacing, and radii.
+- `web/src/styles/`: base, shared controls, navigation, desk layout, auth, and composer styles.
+- `web/src/workspace.css`: workspace layout and responsive column rules.
+- `web/src/components/`: shared navigation, mobile bar, brand, and native modal.
+- `web/src/views/`: one module per workspace feature; `WorkspaceViews.tsx` preserves the public exports.
+- `web/src/lib/attachments.ts`: upload transport, separate from compose presentation.
+
+Add shared visual rules to their owning stylesheet instead of appending overrides
+to the CSS entry point. Keep route-specific behavior in its view module.

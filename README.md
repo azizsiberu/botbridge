@@ -469,7 +469,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Dashboard
 
-The desk is an operations surface, documented in [docs/design.md](docs/design.md). Familjen Grotesk throughout, IBM Plex Mono only for tokens and snippets, and one lagoon accent. A dark spine holds the routes. Records sit in tables, not cards. It opens in the dark theme; the theme control switches to light. Text on the accent fill uses the dark or light ink from that file, in both themes. Empty, loading, and error states use the same components. A new account gets a short numbered setup instead of a blank table. Sign-in is `/sign-in` and sign-up is `/sign-up`.
+The desk is an operations surface, documented in [docs/design.md](docs/design.md). Inter throughout, IBM Plex Mono only for tokens and snippets, and monochrome actions. A dark spine holds the routes. Records use shared list rows. It opens in the dark theme; the theme control switches to light. Text on the accent fill uses the dark or light ink from that file, in both themes. Empty, loading, and error states use the same components. A new account gets a short numbered setup instead of a blank table. Sign-in is `/sign-in` and sign-up is `/sign-up`.
 
 Open `/` on the same host. People sign in with Clerk and manage their own bots. Instance admins, from the allowlist, also see every account. The allowlist is `BOTBRIDGE_ADMIN_EMAILS`, `BOTBRIDGE_ADMIN_USER_IDS`, or both `BOTBRIDGE_ADMIN_ORG_ID` and `BOTBRIDGE_ADMIN_ORG_ROLE`. If none of those are set, the desk refuses everyone.
 

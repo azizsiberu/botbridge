@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type AuditEntry } from '../api';
-import { Empty, ErrorNote, FeedItem, FeedList, PageTitle, control, time } from '../ui';
+import { Empty, ErrorNote, FeedItem, FeedList, Loading, PageTitle, control, time } from '../ui';
 
 export function AuditPage() {
   const [action, setAction] = useState('');
@@ -24,6 +24,7 @@ export function AuditPage() {
         <input className={control} aria-label="Action" placeholder="Action, for example message.sent" value={action} onChange={(event) => setAction(event.target.value)} />
         <input className={control} aria-label="Bot name" placeholder="Bot name" value={actor} onChange={(event) => setActor(event.target.value)} />
       </div>
+      {!entries && !error ? <Loading label="Loading audit log." /> : null}
       {error ? <ErrorNote message={error} /> : null}
       {entries?.length === 0 ? <Empty title="No audit entries" body="Sends, tasks, token rotations, and doorbell tests are written here." /> : null}
       {entries && entries.length > 0 ? (
